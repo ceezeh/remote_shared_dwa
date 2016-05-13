@@ -1,22 +1,19 @@
 #include "ros/ros.h"
-#include "std_msgs/String.h"
 #include "geometry_msgs/TwistStamped.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/Odometry.h"
 #include <unistd.h>
-#include <pthread.h>
 #include <math.h>
 #include <sstream>
 #include <stdlib.h>
-#include <cstdint>
 #include <numeric>
-#include <boost/circular_buffer.hpp>
 #include "shared_dwa/map.h"
 #include "shared_dwa/shared_dwa.h"
 
 using namespace std;
 
 bool debug = true;
+
 SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 
 	// Trajectories.
@@ -29,8 +26,8 @@ SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 	horizon = 5 / dt; // 10 seconds
 	refresh_period = 1 / dt;
 	// WC kinematics
-	acc_lim_v = 0.06 * 8; // 0.06 original but tooooo small. Tooooo.
-	acc_lim_w = 2.4;
+	acc_lim_v = 0.06 * 15; // 0.06 original but tooooo small. Tooooo.
+	acc_lim_w = 1.8;
 	decc_lim_v = -0.96;
 	decc_lim_w = -4.8;
 	max_trans_vel = MAX_LIN_VEL;
@@ -38,8 +35,8 @@ SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 	max_rot_vel = MAX_ANG_VEL;
 	min_rot_vel = -MIN_ANG_VEL;
 	// WC dimensions.
-	wc_length = 1.300; //m
-	wc_width = .800; //m
+	wc_length = 1.400; //m
+	wc_width = .700; //m
 
 	vstep = (max_trans_vel - min_trans_vel) / 16;
 	wstep = (max_rot_vel - min_rot_vel) / 16;
@@ -48,7 +45,7 @@ SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 	 * These parameters are used for accessing the right back side of the wheelchair
 	 * as the start position to fill or check occupancy.
 	 */
-	length_offset = .350;
+	length_offset = .550;
 	width_offset = wc_width / 2;
 
 	humanInput = Speed(0, 0);
@@ -81,15 +78,15 @@ SharedDWA::~SharedDWA() {
 	delete this->dwa_map;
 }
 
-void SharedDWA::odomCallback(const geometry_msgs::TwistStamped::ConstPtr& cmd) {
-	if (!equals(cmd->twist.linear.x, INVALIDCMD)) {
+void SharedDWA::odomCallback(const nav_msgs::Odometry& cmd) {
+	if (!equals(cmd.twist.twist.linear.x, INVALIDCMD)) {
 		// update v
-		this->odom.v = cmd->twist.linear.x;
+		this->odom.v = cmd.twist.twist.linear.x;
 		ROS_INFO("I heard something, v= %f", this->odom.v);
 	}
 
-	if (!equals(cmd->twist.angular.z, INVALIDCMD)) {
-		this->odom.w = cmd->twist.angular.z; // scaling factor that maps user's command to real world units.
+	if (!equals(cmd.twist.twist.angular.z, INVALIDCMD)) {
+		this->odom.w = cmd.twist.twist.angular.z;// scaling factor that maps user's command to real world units.
 		ROS_INFO("I heard something, w= %f", this->odom.w);
 	}
 
@@ -105,13 +102,13 @@ void SharedDWA::usercommandCallback(
 
 	if (!equals(cmd->twist.linear.x, INVALIDCMD)) {
 		// update v
-//		this->humanInput.v = 0.0;
+//		this->humanInput.v = -.3;
 		this->humanInput.v = cmd->twist.linear.x;
 		ROS_INFO("I heard something, v= %f", this->humanInput.v);
 	}
 
 	if (!equals(cmd->twist.angular.z, INVALIDCMD)) {
-//		this->humanInput.w = 0.7;
+//		this->humanInput.w = 0;
 		this->humanInput.w = cmd->twist.angular.z;
 		ROS_INFO("I heard something, w= %f", this->humanInput.w);
 	}
@@ -148,8 +145,7 @@ float SharedDWA::computeHeading(Speed usercommand, Speed candidateSpeed) {
 
 	// All calculations is done is local frame.
 	// Normalise user's speed first.
-	SpeedPtr goalptr(new Speed(usercommand));
-	Speed goal = *normaliseSpeed(goalptr);
+	Speed goal = normaliseSpeed(usercommand);
 	/*
 	 * normalise the test speed as well.
 	 * Here we are asking what speed would closely match the user's
@@ -161,8 +157,7 @@ float SharedDWA::computeHeading(Speed usercommand, Speed candidateSpeed) {
 	 * instantaneous direction and magnitude of motion (i.e over velocity space)
 	 */
 	float goalth = atan2(goal.w, goal.v); // gets the starting motion direction from the user's input.
-	SpeedPtr testptr(new Speed(candidateSpeed));
-	Speed test = *normaliseSpeed(testptr);
+	Speed test = normaliseSpeed(candidateSpeed);
 	float candididateth = atan2(test.w, test.v);
 
 //	float xgoal = 0;
@@ -219,16 +214,38 @@ float SharedDWA::computeHeading(Speed usercommand, Speed candidateSpeed) {
  * TODO: Populate values on a lookup table to prevent re-evaluation.
  */
 
+float SharedDWA::sqrt_approx(float z) {
+	int val_int = *(int*) &z; /* Same bits, but as an int */
+	/*
+	 * To justify the following code, prove that
+	 *
+	 * ((((val_int / 2^m) - b) / 2) + b) * 2^m = ((val_int - 2^m) / 2) + ((b + 1) / 2) * 2^m)
+	 *
+	 * where
+	 *
+	 * b = exponent bias
+	 * m = number of mantissa bits
+	 *
+	 * .
+	 */
+
+	val_int -= 1 << 23; /* Subtract 2^m. */
+	val_int >>= 1; /* Divide by 2. */
+	val_int += 1 << 29; /* Add ((b + 1) / 2) * 2^m. */
+
+	return *(float*) &val_int; /* Interpret again as float */
+}
+
 float SharedDWA::computeClearance(Speed candidateSpeed) {
-	// clearance is normalised to [0,1] by dividing by the range which is the diagonal of the map square.
-	float clearance = -1
-			+ 2
-					/ (1
-							+ exp(
-									-5
-											* computeDistToNearestObstacle(
-													candidateSpeed) / 1000));
-	return clearance;
+	// clearance is normalised to [0,1] by d
+	if (candidateSpeed == Speed(0, 0)) {
+		return 1;
+	}
+	float x = computeDistToNearestObstacle(candidateSpeed);
+	x = (x < .3) ? 0 : x / 2.550;
+	x = (x > 1) ? 1 : x;
+//	float clearance = -1+ 2	/ (1+ exp(-2* sqrt_approx(x)));
+	return x;
 
 }
 
@@ -237,7 +254,7 @@ float SharedDWA::computeDistToNearestObstacle(Speed candidateSpeed) {
 	// Compute and normalize clearance.
 	float x, y, th;
 	x = y = th = 0;
-	float clearance = this->mapsize / 3;
+	float clearance = 2.55; // 2.55m is maximum detectable distance by sonar
 	int count = 10; // we want 2 seconds = 2/dt counts
 	for (int i = 0; i < horizon; i++) {
 		x += candidateSpeed.v * cos(th) * dt;
@@ -321,8 +338,7 @@ vector<Pose> SharedDWA::getObstacles(Pose pose, vector<Pose> obstacles) {
  */
 float SharedDWA::computeVelocity(Speed candidateSpeed) {
 	// Normalise velocity to [0, 1] range.
-	SpeedPtr speedptr(new Speed(candidateSpeed));
-	Speed speed = *normaliseSpeed(speedptr);
+	Speed speed = normaliseSpeed(candidateSpeed);
 	return vectorNorm(speed);
 }
 /*
@@ -389,7 +405,7 @@ vector<Speed> SharedDWA::getResultantVelocities(
 		}
 		upperbound_v = min(upperbound_v, max_trans_vel);
 		lowerbound_v = max(lowerbound_v, min_trans_vel);
-		float step = (upperbound_v - lowerbound_v) / 8;
+		float step = (upperbound_v - lowerbound_v) / 6;
 		for (float vel = lowerbound_v; vel <= upperbound_v; vel += step) {
 
 			float w = vel * tan(trajectories[i]);
@@ -404,14 +420,15 @@ vector<Speed> SharedDWA::getResultantVelocities(
 			upperbound_w = min(upperbound_w, max_rot_vel);
 			lowerbound_w = max(lowerbound_w, min_rot_vel);
 			// for very large tan, the data becomes skewed so just use the dw as boundary
-			if (tan(trajectories[i]) > 9e3) {
-				if (w < 0) {
-					w = lowerbound_w + 0.001;
-				} else {
-					w = upperbound_w - 0.001;
+
+			if (abs(tan(trajectories[i])) > 9e3) {
+				float stepw = (upperbound_w - lowerbound_w) / 6;
+				for (float w = lowerbound_w; w < upperbound_w; w += stepw) {
+					if ((w >= lowerbound_w) && ((w <= upperbound_w))) {
+						resultantVelocities.emplace_back(vel, w);
+					}
 				}
-			}
-			if ((w >= lowerbound_w) && ((w <= upperbound_w))) {
+			} else if ((w >= lowerbound_w) && ((w <= upperbound_w))) {
 				if (zeroVisited && equals(vel, 0) && equals(w, 0)) {
 					continue;
 				} else if (equals(vel, 0) && (equals(w, 0))) {
@@ -419,6 +436,7 @@ vector<Speed> SharedDWA::getResultantVelocities(
 				}
 				resultantVelocities.emplace_back(vel, w);
 			}
+
 		}
 
 	}
@@ -445,9 +463,9 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 	resultantVelocities = getResultantVelocities(resultantVelocities);
 
 	float maxCost = 0;
-	float a = 0.05; // agreement factor between user command and resultant velocity. More means less agreement.
+	float a = 01; // agreement factor between user command and resultant velocity. More means less agreement.
 	// Put weightings here.
-	float alpha = 0.4; // For heading.
+	float alpha = 0.1; // For heading.
 	float beta = 0.4; // For clearance.
 	float gamma = 0.2; // For velocity.
 	float final_clearance = 0;
@@ -461,30 +479,35 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 			if (j != 0 && i == 0)
 				continue;
 			Speed speed = resultantVelocities[i];
-			SpeedPtr speedptr(new Speed(inputDist[j]));
-			const Speed input = (const Speed) (*getRealSpeed(speedptr));
-			float heading = computeHeading(input, speed);
+			const Speed input = (const Speed) (getRealSpeed(inputDist[j]));
+//			float heading = computeHeading(input, speed);
 			float clearance = computeClearance(speed);
 
-			float velocity = computeVelocity(speed);
-			float G = alpha * heading + beta * clearance + gamma * velocity;
+//			float velocity = computeVelocity(speed);
+//			float G = alpha * heading + beta * clearance + gamma * velocity;
 			// Compute preference for user's input
 			// 1 here is the weighting for that particular input speed,
 			// which will change in time!
-			float coupling = exp(
-					-0.5 * magSquared(*normaliseSpeed(speed - input)) / a);
+			Speed temp = speed - input;
+			temp = normaliseSpeed(temp);
+			float x = magSquared(temp);
+			x *= -0.5 / a;
+			float coupling = expf(x);
 			float inputWeight = 1;
-			float cost = G * coupling * inputWeight;
+			float cost = clearance * coupling * inputWeight;
 
 #ifdef DEBUG
 			ROS_INFO("Printing out DWA parameters for specific velocity ...");
-			ROS_INFO(
-					"Vel[v = %f, w= %f], Input[v = %f, w= %f], heading=%f, clearance=%f, "
-							"velocity = %f, G = %f, coupling = %f, cost = %f",
-					speed.v, speed.w, input.v, input.w, heading, clearance,
-					velocity, G, coupling, cost);
+//			ROS_INFO(
+//					"Vel[v = %f, w= %f], Input[v = %f, w= %f], heading=%f, clearance=%f, "
+//							"velocity = %f, G = %f, coupling = %f, cost = %f",
+//					speed.v, speed.w, input.v, input.w, heading, clearance,
+//					velocity, G, coupling, cost);
+			ROS_INFO("Vel[v = %f, w= %f], Input[v = %f, w= %f], clearance=%f, "
+					" coupling = %f, cost = %f", speed.v, speed.w, input.v,
+					input.w, clearance, coupling, cost);
 
-			addCostFn(speed, G, heading, clearance, velocity, coupling);
+			addCostFn(speed, cost, clearance, coupling, 000, 000);
 #endif
 			if (cost > maxCost) {
 #ifdef DEBUG
@@ -568,8 +591,8 @@ void SharedDWA::addCostFn(Speed speed, float G, float heading, float clearance,
 	marker.pose.orientation.z = 0.0;
 	marker.pose.orientation.w = 1.0;
 
-	marker.scale.x = 0.2;
-	marker.scale.y = 0.2;
+	marker.scale.x = vstep;
+	marker.scale.y = wstep;
 	marker.scale.z = 0.2;
 	// Set the color -- be sure to set alpha to something non-zero!
 	marker.color.r = 0.0f;
@@ -578,6 +601,7 @@ void SharedDWA::addCostFn(Speed speed, float G, float heading, float clearance,
 	marker.color.a = 1.0;
 	marker.lifetime = ros::Duration();
 	marker.scale.z = G;
+	marker.pose.position.z = G / 2;
 	marker.ns = "/G";
 	G_ma.markers.push_back(marker);
 
@@ -587,6 +611,7 @@ void SharedDWA::addCostFn(Speed speed, float G, float heading, float clearance,
 	marker.color.g = 0.0f;
 	marker.color.b = 1.0f;
 	marker.scale.z = heading;
+	marker.pose.position.z = heading / 2;
 	marker.ns = "/heading";
 	heading_ma.markers.push_back(marker);
 
@@ -596,6 +621,7 @@ void SharedDWA::addCostFn(Speed speed, float G, float heading, float clearance,
 	marker.color.g = 0.0f;
 	marker.color.b = 0.0f;
 	marker.scale.z = clearance;
+	marker.pose.position.z = clearance / 2;
 	marker.ns = "/clearance";
 	clearance_ma.markers.push_back(marker);
 
@@ -605,6 +631,7 @@ void SharedDWA::addCostFn(Speed speed, float G, float heading, float clearance,
 	marker.color.g = 1.0f;
 	marker.color.b = 0.0f;
 	marker.scale.z = velocity;
+	marker.pose.position.z = velocity / 2;
 	marker.ns = "/velocity";
 	velocity_ma.markers.push_back(marker);
 
@@ -614,6 +641,7 @@ void SharedDWA::addCostFn(Speed speed, float G, float heading, float clearance,
 	marker.color.g = 1.0f;
 	marker.color.b = 1.0f;
 	marker.scale.z = coupling;
+	marker.pose.position.z = coupling / 2;
 	marker.ns = "/coupling";
 	coupling_ma.markers.push_back(marker);
 }

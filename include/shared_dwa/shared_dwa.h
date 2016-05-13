@@ -14,17 +14,13 @@
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/Odometry.h"
 #include <unistd.h>
-#include <pthread.h>
-#include <sstream>
 #include <stdlib.h>
-#include <cstdint>
-#include <boost/circular_buffer.hpp>
-#include <boost/shared_ptr.hpp>
 #include <vector>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
-#include <cmath>
+#include <math.h>
+#include <numeric>
 #define equals(x, y) (abs(x-y) < 0.001)
 #define INVALIDCMD -2
 
@@ -49,6 +45,7 @@ typedef enum {
 struct Speed {
 	float v;
 	float w;
+
 	Speed(const Speed& speed) :
 			v(speed.v), w(speed.w) {
 	}
@@ -59,12 +56,12 @@ struct Speed {
 		w = v = 0;
 	}
 
-	boost::shared_ptr<Speed> operator-(Speed rhs) // copy/move constructor is called to construct arg
+	Speed operator-(Speed rhs) // copy/move constructor is called to construct arg
 			{
-		boost::shared_ptr<Speed> speedptr(new Speed());
-		speedptr->v = this->v - rhs.v;
-		speedptr->w = this->w - rhs.w;
-		return speedptr;
+		Speed speed = Speed();
+		speed.v = this->v - rhs.v;
+		speed.w = this->w - rhs.w;
+		return speed;
 	}
 	bool operator==(Speed s) // copy/move constructor is called to construct arg
 			{
@@ -75,7 +72,6 @@ struct Speed {
 		}
 	}
 };
-typedef boost::shared_ptr<Speed> SpeedPtr;
 
 struct Pose {
 	float x;
@@ -136,7 +132,7 @@ private:
 	float dt;
 
 	void occupancyCallback(const nav_msgs::OccupancyGrid& og);
-	void odomCallback(const geometry_msgs::TwistStamped::ConstPtr& cmd);
+	void odomCallback(const nav_msgs::Odometry& cmd);
 	void usercommandCallback(const geometry_msgs::TwistStamped::ConstPtr& cmd);
 	void updateInputCommand(float v, float w, InterfaceType In);
 
@@ -173,34 +169,34 @@ private:
 	float length_offset, width_offset;
 
 	// inverse of normalise speed.
-	SpeedPtr getRealSpeed(SpeedPtr speedptr_old) {
-		SpeedPtr speedptr(new Speed(*speedptr_old));
-		if (speedptr->v >= 0) {
-			speedptr->v *= ( MAX_LIN_VEL);
+	Speed getRealSpeed(Speed speed_old) {
+		Speed speed = Speed(speed_old);
+		if (speed.v >= 0) {
+			speed.v *= ( MAX_LIN_VEL);
 		} else {
-			speedptr->v *= ( MIN_LIN_VEL);
+			speed.v *= ( MIN_LIN_VEL);
 		}
-		if (speedptr->w >= 0) {
-			speedptr->w *= ( MAX_ANG_VEL);
+		if (speed.w >= 0) {
+			speed.w *= ( MAX_ANG_VEL);
 		} else {
-			speedptr->w *= ( MIN_ANG_VEL);
+			speed.w *= ( MIN_ANG_VEL);
 		}
-		return speedptr;
+		return speed;
 	}
 
-	SpeedPtr normaliseSpeed(SpeedPtr speedptr_old) {
-		SpeedPtr speedptr(new Speed(*speedptr_old));
-		if (speedptr->v >= 0) {
-			speedptr->v /= ( MAX_LIN_VEL);
+	Speed normaliseSpeed(Speed speed_old) {
+		Speed speed = Speed(speed_old);
+		if (speed.v >= 0) {
+			speed.v /= ( MAX_LIN_VEL);
 		} else {
-			speedptr->v /= ( MIN_LIN_VEL);
+			speed.v /= ( MIN_LIN_VEL);
 		}
-		if (speedptr->w >= 0) {
-			speedptr->w /= ( MAX_ANG_VEL);
+		if (speed.w >= 0) {
+			speed.w /= ( MAX_ANG_VEL);
 		} else {
-			speedptr->w /= ( MIN_ANG_VEL);
+			speed.w /= ( MIN_ANG_VEL);
 		}
-		return speedptr;
+		return speed;
 	}
 // -------------DWA----------
 	/*
@@ -234,17 +230,19 @@ private:
 		return th;
 	}
 	float vectorNorm(Pose p) {
-		float v[] = { p.x, p.y };
-		return sqrt(inner_product(v, v + 1, v, 0.0L));
+		std::vector<float> v { p.x, p.y };
+		float res = inner_product(v.begin(), v.end(), v.begin(), 0.0f);
+		return sqrt(res);
 	}
 	float vectorNorm(Speed p) {
-		float v[] = { p.v, p.w };
-		return sqrt(inner_product(v, v + 1, v, 0.0L));
+		return sqrt(magSquared(p));
 	}
 	float magSquared(Speed p) {
-		float v[] = { p.v, p.w };
-		return inner_product(v, v + 1, v, 0.0L);
+		std::vector<float> v { p.v, p.w };
+		float res = inner_product(v.begin(), v.end(), v.begin(), 0.0f);
+		return res;
 	}
+	float sqrt_approx(float z);
 
 }
 ;
