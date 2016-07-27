@@ -11,7 +11,7 @@
 #include "shared_dwa/shared_dwa.h"
 #include <chrono>
 #include <map/helper.h>
-//#define LINEAR
+#define LINEAR
 using namespace std;
 using namespace std::chrono;
 
@@ -831,14 +831,11 @@ void SharedDWA::run() {
 
 	Speed chosenSpeed;
 	int maxduration;
-	int aveduration;
-	count = 0;
-	MyTimer timer = MyTimer();
-
 	while (ros::ok()) {
-		timer.start();
+		high_resolution_clock::time_point t1 = high_resolution_clock::now();
 		chosenSpeed = computeNextVelocity(chosenSpeed);
-		timer.stop();
+		high_resolution_clock::time_point t2 = high_resolution_clock::now();
+
 
 		geometry_msgs::TwistStamped motorcmd;
 		motorcmd.header.stamp = ros::Time::now();
@@ -856,11 +853,12 @@ void SharedDWA::run() {
 		ros::spinOnce();
 		ros::spinOnce();
 		ros::spinOnce();
-		ros::spinOnce();
+				ros::spinOnce();
 		loop_rate.sleep();
-
-		cout << "DWA Max Duration: " << timer.getMaxDuration() << endl;
-		cout << "DWA Average Duration: " << timer.getAveDuration() << endl;
+		auto duration = duration_cast < microseconds > (t2 - t1).count();
+				if (duration > maxduration)
+					maxduration = duration;
+				cout << "Max Duration" << maxduration << endl;
 	}
 
 }

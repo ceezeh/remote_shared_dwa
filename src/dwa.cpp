@@ -7,28 +7,28 @@
 #include <sstream>
 #include <stdlib.h>
 #include <numeric>
+#include "shared_dwa/helper.h"
 #include "shared_dwa/map.h"
-#include "shared_dwa/shared_dwa.h"
+#include "shared_dwa/dwa.h"
 #include <chrono>
-#include <map/helper.h>
-//#define LINEAR
+
 using namespace std;
 using namespace std::chrono;
 
-SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
+DWA::DWA(ros::NodeHandle &n_t) {
 
 	// Trajectories.
-	for (float i = -M_PI; i < M_PI; i += 0.5235987756) { // Split into 12 angles  for each quadrant.
+	for (float i = -M_PI; i < M_PI; i += 0.3926990817) { // Split into 16 angles four for each quadrant.
 		trajectories.push_back(i);
 	}
-	dt = 0.1; // seconds.
+	dt = 0.05; // seconds.
 
 	//	 TODO: Verify these parameters.
-	horizon = 20 / dt; // 10 seconds
-	refresh_period = 0; // 1 / dt;
+	horizon = 15 / dt; // 10 seconds
+	refresh_period = 1 / dt;
 	// WC kinematics
 	acc_lim_v = 0.06 * 20; // 0.06 original but tooooo small. Tooooo.
-	acc_lim_w = 3;
+	acc_lim_w = 2.4;
 	decc_lim_v = -0.96;
 	decc_lim_w = -3;
 	max_trans_vel = MIN_LIN_VEL;
@@ -36,33 +36,34 @@ SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 	max_rot_vel = MAX_ANG_VEL;
 	min_rot_vel = -MIN_ANG_VEL;
 	// WC dimensions.
-	wc_length = 1.300; //m
-	wc_width = .800; //m
+	wc_length = 1.400; //m
+	wc_width = .700; //m
 
-	vstep = (max_trans_vel - min_trans_vel) / 5;
-	wstep = (max_rot_vel - min_rot_vel) / 5;
+	vstep = (max_trans_vel - min_trans_vel) / 8;
+	wstep = (max_rot_vel - min_rot_vel) / 8;
 
 	/*
 	 * These parameters are used for accessing the right back side of the wheelchair
 	 * as the start position to fill or check occupancy.
 	 */
-	length_offset = .50;
+	length_offset = .550;
 	width_offset = wc_width / 2;
 
-	humanInput = Speed(0, 0);
+	humanInput = Speed(0.7, 0);
+	this->updateInputCommand(this->humanInput.v, this->humanInput.w, Joystick);
 	odom = Speed(0, 0);
-	float gridsize = 0.05;
-	float mapsize = 4;
-	dwa_map = new DWAMap(gridsize, mapsize);
+	gridsize = .0500;
+	mapsize = 4.000; //mm
+	noOfgrids = (mapsize / gridsize) + 0.5;
+	dwa_map = new DWAMap(gridsize);
 	n = n_t;
-	command_pub = n.advertise < geometry_msgs::TwistStamped
-			> ("motor_command", 100);
-	usercommand_pub = n.advertise < geometry_msgs::TwistStamped
-			> ("user_command_logger", 100);
-	odom_sub = n.subscribe("odom", 10, &SharedDWA::odomCallback, this);
-	interface_sub = n.subscribe("user_command", 1,
-			&SharedDWA::usercommandCallback, this);
-	occupancy_sub = n.subscribe("localmap", 1, &SharedDWA::occupancyCallback,
+	command_pub = n.advertise<geometry_msgs::TwistStamped>("motor_command",
+			100);
+	usercommand_pub = n.advertise<geometry_msgs::TwistStamped>("user_command_logger",
+				100);
+	odom_sub = n.subscribe("odom", 1, &DWA::odomCallback, this);
+
+	occupancy_sub = n.subscribe("localmap", 1, &DWA::occupancyCallback,
 			this);
 #ifdef DEBUG
 	G_pub = n.advertise<visualization_msgs::MarkerArray>("G_viz", 10);
@@ -75,59 +76,54 @@ SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 	coupling_pub = n.advertise<visualization_msgs::MarkerArray>("coupling_viz",
 			10);
 #endif
-	while (occupancy_sub.getNumPublishers() == 0)
-		;
+	while(occupancy_sub.getNumPublishers() == 0);
 	sleep(10);
 }
 
-SharedDWA::~SharedDWA() {
+DWA::~DWA() {
 	delete this->dwa_map;
 }
 
-void SharedDWA::odomCallback(const nav_msgs::Odometry& cmd) {
-//	if (!equals(cmd.twist.twist.linear.x, INVALIDCMD)) {
-	// update v
-	this->odom.v = cmd.twist.twist.linear.x;
+void DWA::odomCallback(const nav_msgs::Odometry& cmd) {
+	if (!equals(cmd.twist.twist.linear.x, INVALIDCMD)) {
+		// update v
+		this->odom.v = cmd.twist.twist.linear.x;
 #ifdef DEBUG
-	ROS_INFO("I heard something, v= %f", this->odom.v);
+		ROS_INFO("I heard something, v= %f", this->odom.v);
 #endif
-//	}
+	}
 
-//	if (!equals(cmd.twist.twist.angular.z, INVALIDCMD)) {
-	this->odom.w = cmd.twist.twist.angular.z; // scaling factor that maps user's command to real world units.
+	if (!equals(cmd.twist.twist.angular.z, INVALIDCMD)) {
+		this->odom.w = cmd.twist.twist.angular.z;// scaling factor that maps user's command to real world units.
 #ifdef DEBUG
-			ROS_INFO("I heard something, w= %f", this->odom.w);
+		ROS_INFO("I heard something, w= %f", this->odom.w);
 #endif
-//	}
+	}
 
 }
 
-void SharedDWA::occupancyCallback(const nav_msgs::OccupancyGrid& og) {
+void DWA::occupancyCallback(const nav_msgs::OccupancyGrid& og) {
 	this->dwa_map->updateMap(og);
 
 }
 
-void SharedDWA::usercommandCallback(
-		const geometry_msgs::TwistStamped::ConstPtr& cmd) {
 
-	if (!equals(cmd->twist.linear.x, INVALIDCMD)) {
-		// update v
-//		this->humanInput.v = .7;
-		this->humanInput.v = cmd->twist.linear.x;
-#ifdef DEBUG
-		ROS_INFO("I heard something, v= %f", this->humanInput.v);
-#endif
-	}
-
-	if (!equals(cmd->twist.angular.z, INVALIDCMD)) {
-//		this->humanInput.w = 0;
-		this->humanInput.w = cmd->twist.angular.z;
-#ifdef DEBUG
-		ROS_INFO("I heard something, w= %f", this->humanInput.w);
-#endif
-	}
+void DWA::updateInputCommand(float v, float w, InterfaceType In) { // input command here is assumed to be normalised to [-1,1]
+	inputDist.clear();
+	inputDist.emplace_back(v, w);
+	// Create probability distribution for different interfaces.
+//	if (In == Joystick) { // uses a dirac function as distribution.
+//		inputDist.emplace_back(v, w);
+//	} else { // Button uses a uniform distribution
+//		// Assume uniform distribution of +-22 degrees around specified command.
+//
+//		for (float i = -11; i < 11.2; i += 5) {
+//			float v_t = cos(i * M_PI / 180) * v - sin(i * M_PI / 180) * w;
+//			float w_t = sin(i * M_PI / 180) * v + cos(i * M_PI / 180) * w;
+//			inputDist.emplace_back(v_t, w_t);
+//		}
+//	}
 }
-
 /*
  * Heading is defined in the first paper on DWA
  * as the bearing of the robot’s direction from the goal,
@@ -137,7 +133,7 @@ void SharedDWA::usercommandCallback(
  *
  * We normalise this value to the -1,1 range.
  */
-float SharedDWA::computeHeading(Speed usercommand, Speed candidateSpeed) {
+float DWA::computeHeading(Speed usercommand, Speed candidateSpeed) {
 	// Compute goal from user command.
 
 	// All calculations is done is local frame.
@@ -211,7 +207,7 @@ float SharedDWA::computeHeading(Speed usercommand, Speed candidateSpeed) {
  * TODO: Populate values on a lookup table to prevent re-evaluation.
  */
 
-float SharedDWA::sqrt_approx(float z) {
+float DWA::sqrt_approx(float z) {
 	int val_int = *(int*) &z; /* Same bits, but as an int */
 	/*
 	 * To justify the following code, prove that
@@ -233,31 +229,30 @@ float SharedDWA::sqrt_approx(float z) {
 	return *(float*) &val_int; /* Interpret again as float */
 }
 
-float SharedDWA::computeClearance(Speed candidateSpeed) {
+float DWA::computeClearance(Speed candidateSpeed) {
 	// clearance is normalised to [0,1] by d
 	if (candidateSpeed == Speed(0, 0)) {
-		return .0;
+		return 1;
 	}
 	float x = computeDistToNearestObstacle(candidateSpeed);
 #ifdef DEBUG
 	ROS_INFO("Pre clearance: %f",x);
 #endif
-	x = (x < .1) ? 0 : x / 2.550;
-//	x = (x > 1) ? 1 : x;
-//	x /= 2.55;
+	x = (x < .15) ? 0 : x / 2.550;
+	x = (x > 1) ? 1 : x;
 
 //	float clearance = -1+ 2	/ (1+ exp(-2* sqrt_approx(x)));
 	return x;
 
 }
 
-float SharedDWA::computeDistToNearestObstacle(Speed candidateSpeed) {
+float DWA::computeDistToNearestObstacle(Speed candidateSpeed) {
 	// Compute rectangular dimension depicting wheelchair in  occupancy map.
 	// Compute and normalize clearance.
 	float x, y, th;
 	x = y = th = 0;
 	float clearance = 2.55; // 2.55m is maximum detectable distance by sonar
-	int count = refresh_period; // we want 2 seconds = 2/dt counts
+	int count = 10; // we want 2 seconds = 2/dt counts
 	for (int i = 0; i < horizon; i++) {
 		x += candidateSpeed.v * cos(th) * dt;
 		y += candidateSpeed.v * sin(th) * dt;
@@ -269,7 +264,7 @@ float SharedDWA::computeDistToNearestObstacle(Speed candidateSpeed) {
 			count = refresh_period;
 
 			Pose pose = Pose(x, y, th);
-			vector < Pose > obstacles;
+			vector<Pose> obstacles;
 			obstacles.clear();
 			obstacles = getObstacles(pose, obstacles);
 			if (obstacles.empty()) {
@@ -289,63 +284,45 @@ float SharedDWA::computeDistToNearestObstacle(Speed candidateSpeed) {
 	}
 	return clearance;
 }
-// Assumes pose is to be rotated to a coordinate system with T as origin coordinate.
-void rotateFromBody(RealPoint &pose, Pose T) {
-	float x = pose.x;
-	float y = pose.y;
-
-	pose.x = cos(T.th) * x - sin(T.th) * y;
-	pose.y = sin(T.th) * x + cos(T.th) * y;
-
-	pose.x += T.x;
-	pose.y += T.y;
-}
 
 /*
  * Checks if there is any obstacle in the occupancy grid to obstruct the
  * wheelchair if its centre where at pose. Returns the location of the obstacles.
  */
-vector<Pose> SharedDWA::getObstacles(Pose pose, vector<Pose> obstacles) {
-	// Get corners of wheelchair rectangle.
-	RealPoint topLeft = RealPoint(-length_offset, width_offset);
-	RealPoint topRight = RealPoint(wc_length - length_offset, width_offset);
-	RealPoint bottomRight = RealPoint(wc_length - length_offset, -width_offset);
-	RealPoint bottomLeft = RealPoint(-length_offset, -width_offset);
-	// Transform corners into pose coordinate.
-	rotateFromBody(topLeft, pose);
-	rotateFromBody(topRight, pose);
-	rotateFromBody(bottomLeft, pose);
-	rotateFromBody(bottomRight, pose);
+vector<Pose> DWA::getObstacles(Pose pose, vector<Pose> obstacles) {
+	vector<int> visitedIndices;
+	visitedIndices.clear();
+	for (float i = 0; i < wc_length; i += .96 * gridsize) {
+		for (float j = 0; j < wc_width; j += .96 * gridsize) {
+			float x = (i - length_offset);
+			float y = (j - width_offset);
+			float xt = cos(pose.th) * x - sin(pose.th) * y;
+			float yt = sin(pose.th) * x + cos(pose.th) * y;
 
-	// Now get the map equivalent of points.
-	IntPoint topLeftInt = IntPoint(dwa_map->realToMap(topLeft.x),
-			dwa_map->realToMap(topLeft.y));
-	IntPoint topRightInt = IntPoint(dwa_map->realToMap(topRight.x),
-			dwa_map->realToMap(topRight.y));
-	IntPoint bottomLeftInt = IntPoint(dwa_map->realToMap(bottomLeft.x),
-			dwa_map->realToMap(bottomLeft.y));
-	IntPoint bottomRightInt = IntPoint(dwa_map->realToMap(bottomRight.x),
-			dwa_map->realToMap(bottomRight.y));
+			xt += pose.x;
+			yt += pose.y;
 
-	// Compute the outline of the rectangle.
+			int xindx = (int) ((mapsize / 2 + xt) / gridsize);
+			int yindx = (int) ((mapsize / 2 + yt) / gridsize);
+			int index = xindx + noOfgrids * yindx;
+			bool exists = std::find(std::begin(visitedIndices),
+					std::end(visitedIndices), index)
+					!= std::end(visitedIndices);
+			if (exists) {
+				continue;
+			} else {
+				visitedIndices.push_back(index);
+			}
+			try {
 
-	vector < IntPoint > outline;
-	bresenham(topLeftInt.x, topLeftInt.y, topRightInt.x, topRightInt.y,
-			outline);
+				if (this->dwa_map->at(index) > 0) {
 
-	bresenham(topRightInt.x, topRightInt.y, bottomRightInt.x, bottomRightInt.y,
-			outline);
-	bresenham(bottomRightInt.x, bottomRightInt.y, bottomLeftInt.x,
-			bottomLeftInt.y, outline);
-	bresenham(bottomLeftInt.x, bottomLeftInt.y, topLeftInt.x, topLeftInt.y,
-			outline);
-
-	for (int i = 0; i < outline.size(); i++) {
-		IntPoint point = outline[i];
-		if (this->dwa_map->at(point.x, point.y) > 0) {
-			RealPoint realpoint;
-			dwa_map->mapToReal(point.x, point.y, realpoint);
-			obstacles.emplace_back(realpoint.x, realpoint.y, 0);
+					obstacles.emplace_back(xt, yt, 0);
+				}
+			} catch (const std::exception& e) {
+				cout << "Error accessing occupancy at x: !" << xt << " ,y: "
+						<< yt << endl;
+			}
 		}
 	}
 	return obstacles;
@@ -356,7 +333,7 @@ vector<Pose> SharedDWA::getObstacles(Pose pose, vector<Pose> obstacles) {
  *  We want to include angular velocity as well so as to obey the user's commands whilst supporting faster motion.
  *
  */
-float SharedDWA::computeVelocity(Speed candidateSpeed) {
+float DWA::computeVelocity(Speed candidateSpeed) {
 	// Normalise velocity to [0, 1] range.
 	Speed speed = normaliseSpeed(candidateSpeed);
 	return vectorNorm(speed);
@@ -368,23 +345,21 @@ float SharedDWA::computeVelocity(Speed candidateSpeed) {
  * This function really establishes an upperbound on velocity since all very slow speeds are theoretically reachable.
  * We optimize this function by only considering trajectories a certain degree of user input.
  */
-vector<Speed> SharedDWA::getAdmissibleVelocities(vector<Speed> admissibles,
-		float upperbound = M_PI + 1, float lowerbound = -M_PI - 1) {
+vector<Speed> DWA::getAdmissibleVelocities(vector<Speed> admissibles, float upperbound=M_PI+1, float lowerbound=-M_PI-1) {
 	admissibles.clear();
 	// We search for velocities for by keeping a list of radii of curvature.
 	for (int i = 0; i < trajectories.size(); i++) {
 		// Construct a speed object from angle and find the clearance.
 
-		if ((angDiff(trajectories[i], upperbound) > 0)
-				|| (angDiff(trajectories[i], lowerbound) < 0)) {
-			admissibles.emplace_back(0, 0); // This is because the list of admissibles must match with the list of trajectories.
+		if ((trajectories[i] > upperbound) || (trajectories[i] < lowerbound)) {
+			admissibles.emplace_back(0,0); // This is because the list of admissibles must match with the list of trajectories.
 			continue;
 		}
 		Speed trajectory;
 		if ((trajectories[i] < M_PI / 2) && ((trajectories[i] >= -M_PI / 2))) { // +ve v space
-			trajectory.v = 0.1 * max_trans_vel;
+			trajectory.v = 0.5 * max_trans_vel;
 		} else {
-			trajectory.v = 0.1 * min_trans_vel;
+			trajectory.v = 0.5 * min_trans_vel;
 		}
 
 		// need to convert velocities from normalised to real values.
@@ -401,7 +376,7 @@ vector<Speed> SharedDWA::getAdmissibleVelocities(vector<Speed> admissibles,
 	return admissibles;
 }
 
-DynamicWindow SharedDWA::computeDynamicWindow(DynamicWindow dw) {
+DynamicWindow DWA::computeDynamicWindow(DynamicWindow dw) {
 	dw.upperbound.v = odom.v + acc_lim_v * dt;
 	dw.upperbound.w = odom.w + acc_lim_w * dt;
 	dw.lowerbound.v = odom.v - acc_lim_v * dt;
@@ -409,127 +384,18 @@ DynamicWindow SharedDWA::computeDynamicWindow(DynamicWindow dw) {
 	return dw;
 }
 
-//Assumes lower to upper forms a continuous region.
-int SharedDWA::getQuadrant(float upper) {
-
-	upper = wraparound(upper);
-
-	if ((upper >= 0) && (upper < M_PI / 2)) {
-		return 0;
-	}
-
-	if ((upper >= M_PI / 2) && (upper < M_PI)) {
-		return 1;
-	}
-	if ((upper >= -M_PI) && (upper < -M_PI / 2)) {
-		return 2;
-	}
-	if ((upper >= -M_PI / 2) && (upper < 0)) {
-		return 3;
-	}
-}
-bool SharedDWA::compareQuadrant(float ang, float upper, float lower) {
-	// Find quadrant of region.
-	// Check first quadrant
-	// int code means 4321 bits regions for quadrants.
-	int8_t codeR = 0;
-	int8_t code = 0;
-	int8_t qstart = getQuadrant(lower);
-	int8_t qend = getQuadrant(upper);
-	qend++;
-	if (qend == 4) {
-		qend = 0;
-	}
-	int8_t q = getQuadrant(ang);
-	bool in = false;
-	int8_t i = qstart;
-	while (i != qend) {
-		if (i == 4) {
-			i = 0;
-		}
-		if (q == i) {
-			in = true;
-			break;
-		}
-		i++;
-	}
-
-	return in;
-
-}
-vector<Speed> SharedDWA::getResultantVelocities(
-		vector<Speed> resultantVelocities, float upperbound = M_PI + 1,
-		float lowerbound = -M_PI - 1) {
+vector<Speed> DWA::getResultantVelocities(
+		vector<Speed> resultantVelocities, float upperbound=M_PI+1, float lowerbound=-M_PI-1 ) {
 
 	DynamicWindow dw;
 	dw = computeDynamicWindow(dw);
-	vector < Speed > admissibles;
+	vector<Speed> admissibles;
 	admissibles.clear();
 	admissibles = getAdmissibleVelocities(admissibles, upperbound, lowerbound);
 
 	bool zeroVisited = false; // ensures that we add v=w= 0 only once.
 	for (int i = 0; i < trajectories.size(); i++) {
-		if ((angDiff(trajectories[i], upperbound) > 0)
-				|| (angDiff(trajectories[i], lowerbound) < 0)) {
-			continue;
-		}
-
-		// for very large tan, the data becomes skewed so just use the dw as boundary
-		//Here trajectory is either pi/2 or -PI/2
-		if (equals(abs(trajectories[i]), M_PI / 2)) {
-			float vel = 0;
-			float upperbound_w, lowerbound_w;
-			if (equals(trajectories[i], M_PI / 2)) {
-				upperbound_w = dw.upperbound.w;
-				lowerbound_w = (dw.lowerbound.w < 0) ? 0 : dw.lowerbound.w;
-			} else {
-				upperbound_w = (dw.upperbound.w > 0) ? 0 : dw.upperbound.w;
-				lowerbound_w = dw.lowerbound.w;
-			}
-			upperbound_w = min(upperbound_w, max_rot_vel);
-			lowerbound_w = max(lowerbound_w, min_rot_vel);
-			float stepw = (upperbound_w - lowerbound_w) / 6;
-
-			for (float w = lowerbound_w; w < upperbound_w; w += stepw) {
-				if ((w >= lowerbound_w) && ((w <= upperbound_w))) {
-					if (compareQuadrant(atan2(w, vel), upperbound, lowerbound))
-						resultantVelocities.emplace_back(vel, w);
-				}
-			}
-			continue;
-		}
-
-		// For small tan near zero, w = 0
-
-		if (abs(tan(trajectories[i])) < 0.001) {
-			float w = 0;
-			float lowerbound_v, upperbound_v;
-			if ((trajectories[i] < M_PI / 2)
-					&& ((trajectories[i] >= -M_PI / 2))) { // +ve v space
-				// So compute lowerbound on trajectories.
-
-				upperbound_v = min(dw.upperbound.v, admissibles[i].v);
-				lowerbound_v = dw.lowerbound.v;
-			} else {
-				upperbound_v = dw.upperbound.v;
-				lowerbound_v = max(dw.lowerbound.v, admissibles[i].v);
-			}
-			upperbound_v = min(upperbound_v, max_trans_vel);
-			lowerbound_v = max(lowerbound_v, min_trans_vel);
-			/*
-			 * We are assuming focus within a narrow angle so that 0 and PI can not both be within focus.
-			 * Thus if zero is present, pi is not.
-			 */
-			if (compareQuadrant(0, upperbound, lowerbound)) { // If 0 is present.
-				lowerbound_v = (lowerbound_v < 0) ? 0 : lowerbound_v;
-			} else {
-				upperbound_v = (upperbound_v > 0.0) ? 0 : upperbound_v;
-			}
-			float step = (upperbound_v - lowerbound_v) / 6;
-			for (float vel = lowerbound_v; vel <= upperbound_v; vel += step) {
-				if (compareQuadrant(atan2(w, vel), upperbound, lowerbound))
-					resultantVelocities.emplace_back(vel, w);
-			}
+		if ((trajectories[i] > upperbound) || (trajectories[i] < lowerbound)) {
 			continue;
 		}
 
@@ -545,13 +411,10 @@ vector<Speed> SharedDWA::getResultantVelocities(
 		}
 		upperbound_v = min(upperbound_v, max_trans_vel);
 		lowerbound_v = max(lowerbound_v, min_trans_vel);
-
 		float step = (upperbound_v - lowerbound_v) / 6;
 		for (float vel = lowerbound_v; vel <= upperbound_v; vel += step) {
 
-			// For small tan near zero, w = 0
 			float w = vel * tan(trajectories[i]);
-
 			float upperbound_w, lowerbound_w;
 			if (tan(trajectories[i] < 0)) {
 				upperbound_w = dw.upperbound.w;
@@ -562,14 +425,22 @@ vector<Speed> SharedDWA::getResultantVelocities(
 			}
 			upperbound_w = min(upperbound_w, max_rot_vel);
 			lowerbound_w = max(lowerbound_w, min_rot_vel);
-			if ((w >= lowerbound_w) && ((w <= upperbound_w))) {
+			// for very large tan, the data becomes skewed so just use the dw as boundary
+
+			if (abs(tan(trajectories[i])) > 9e3) {
+				float stepw = (upperbound_w - lowerbound_w) / 6;
+				for (float w = lowerbound_w; w < upperbound_w; w += stepw) {
+					if ((w >= lowerbound_w) && ((w <= upperbound_w))) {
+						resultantVelocities.emplace_back(vel, w);
+					}
+				}
+			} else if ((w >= lowerbound_w) && ((w <= upperbound_w))) {
 				if (zeroVisited && equals(vel, 0) && equals(w, 0)) {
 					continue;
 				} else if (equals(vel, 0) && (equals(w, 0))) {
 					zeroVisited = true;
 				}
-				if (compareQuadrant(atan2(w, vel), upperbound, lowerbound))
-					resultantVelocities.emplace_back(vel, w);
+				resultantVelocities.emplace_back(vel, w);
 			}
 
 		}
@@ -592,105 +463,81 @@ vector<Speed> SharedDWA::getResultantVelocities(
  * Let G (v,w) = Fn( α · heading + β·clearance + Ɣ·velocity), where Fn is arbitrary.
  * C = G(v,w) ⨉ exp(-1/(2*s)*(f-h)(f-h)') ⨉  W(H), for each of our possible goal location.
  */
-Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
-
-	if (humanInput == Speed(0, 0))
-		return Speed(0, 0); // Stop!!
-
-	vector < Speed > resultantVelocities;
+Speed DWA::computeNextVelocity(Speed chosenSpeed) {
+	vector<Speed> resultantVelocities;
 	resultantVelocities.clear();
+
 
 	/*
 	 * Create optimized search space.
 	 */
-	float upperbound = -M_PI - 1;
-	float lowerbound = M_PI + 1;
-	Speed input = humanInput;
-	float ang = atan2(input.w, input.v);
-	if (ang > upperbound)
-		upperbound = ang;
-	if (ang < lowerbound)
-		lowerbound = ang;
-
-	upperbound += M_PI * 60 / 180;
-	upperbound = wraparound(upperbound);
-	lowerbound -= M_PI * 60 / 180;
-	lowerbound = wraparound(lowerbound);
+	float upperbound=-M_PI-1;
+	float lowerbound=M_PI+1;
+	for (int j = 0; j < inputDist.size(); j++) {
+		Speed input = inputDist[0];
+		float ang = atan2(input.w, input.v);
+		if (ang > upperbound) upperbound = ang;
+		if (ang < lowerbound) lowerbound = ang;
+	}
+	upperbound += M_PI*45/180;
+	lowerbound -= M_PI*45/180;
 	ROS_INFO("upperbound: %f, lowerbound: %f", upperbound, lowerbound);
-	resultantVelocities = getResultantVelocities(resultantVelocities,
-			upperbound, lowerbound);
+	resultantVelocities = getResultantVelocities(resultantVelocities, upperbound, lowerbound);
+
 
 	float maxCost = 0;
-	float a = .1; // agreement factor between user command and resultant velocity. More means less agreement.
+	float a = 01; // agreement factor between user command and resultant velocity. More means less agreement.
 	// Put weightings here.
-	float alpha = 0.1;	// For heading.
-	float beta = 0.4;	// For clearance.
-	float gamma = 0.2;	// For velocity.
+	float alpha = 0.1; // For heading.
+	float beta = 0.4; // For clearance.
+	float gamma = 0.2; // For velocity.
 	float final_clearance = 0;
-//#ifdef DEBUG
-//	visualiseCostFn();
-//#endif
+#ifdef DEBUG
+	visualiseCostFn();
+#endif
 
-	for (int i = 0; i < resultantVelocities.size(); i++) {
-#ifdef LINEAR
-		Speed speed = resultantVelocities[i];
-		const Speed input = (const Speed) (getRealSpeed(humanInput));
-		float heading = computeHeading(input, speed);
-		float clearance = computeClearance(speed);
+		for (int i = 0; i < resultantVelocities.size(); i++) {
 
-		float velocity = computeVelocity(speed);
-		float G = alpha * heading + beta * clearance + gamma * velocity;
+			Speed speed = resultantVelocities[i];
+			const Speed input = (const Speed) (getRealSpeed(inputDist[0]));
+			float heading = computeHeading(input, speed);
+			float clearance = computeClearance(speed);
 
-		float cost = G;
-#else
-		Speed speed = resultantVelocities[i];
-		const Speed input = (const Speed) (getRealSpeed(humanInput));
-//			float heading = computeHeading(input, speed);
-		float clearance = computeClearance(speed);
+			float velocity = computeVelocity(speed);
+			float G = alpha * heading + beta * clearance + gamma * velocity;
+			// Compute preference for user's input
+			// 1 here is the weighting for that particular input speed,
+			// which will change in time!
+			Speed temp = speed - input;
+			temp = normaliseSpeed(temp);
+			float x = magSquared(temp);
+			x *= -0.5 / a;
+			float coupling = expf(x);
+			float inputWeight = 1;
+			float cost = G * coupling * inputWeight;
 
-//			float velocity = computeVelocity(speed);
-//			float G = alpha * heading + beta * clearance + gamma * velocity;
-		// Compute preference for user's input
-		// 1 here is the weighting for that particular input speed,
-		// which will change in time!
-		Speed temp = speed - input;
-		temp = normaliseSpeed(temp);
-		float x = magSquared(temp);
-		x *= -0.5 / a;
-		float coupling = expf(x);
-		float inputWeight = 1;
-		float cost = clearance * coupling * inputWeight;
-
-		Speed robotSpeed = normaliseSpeed(speed);
-		float candidate_ang = atan2(robotSpeed.w, robotSpeed.v);
-
-//#ifdef DEBUG
-//			ROS_INFO("Printing out DWA parameters for specific velocity ...");
+#ifdef DEBUG
+			ROS_INFO("Printing out DWA parameters for specific velocity ...");
 //			ROS_INFO(
 //					"Vel[v = %f, w= %f], Input[v = %f, w= %f], heading=%f, clearance=%f, "
 //							"velocity = %f, G = %f, coupling = %f, cost = %f",
 //					speed.v, speed.w, input.v, input.w, heading, clearance,
 //					velocity, G, coupling, cost);
-		ROS_INFO(
-				"Input[v = %f, w= %f], Vel[v = %f, w= %f], clearance=%f, "
-				" coupling = %f, cost = %f, input heading = %f, robot heading =%f",
-				input.v, input.w, speed.v, speed.w, clearance, coupling, cost,
-				ang, candidate_ang);
+			ROS_INFO("Vel[v = %f, w= %f], Input[v = %f, w= %f], clearance=%f, "
+					" coupling = %f, cost = %f", speed.v, speed.w, input.v,
+					input.w, clearance, coupling, cost);
+
+			addCostFn(speed, cost, clearance, coupling, 000, 000);
 #endif
-//			addCostFn(speed, cost, clearance, coupling, 000, 000);
-//#endif
-		if (cost > maxCost) {
+			if (cost > maxCost) {
 #ifdef DEBUG
-			ROS_INFO("[NEW] MAX COST");
+				ROS_INFO("[NEW] MAX COST");
 #endif
-			maxCost = cost;
-#ifdef LINEAR
-			chosenSpeed = (speed + input) * 0.5;
-#else
-			chosenSpeed = speed;
-#endif
-			final_clearance = clearance;
-		}
+				maxCost = cost;
+				chosenSpeed = speed;
+				final_clearance = clearance;
+			}
+
 	}
 
 #ifdef DEBUG
@@ -702,14 +549,13 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 	ROS_INFO("Chosen speed: [v=%f, w=%f]", chosenSpeed.v, chosenSpeed.w);
 #endif
 	chosenSpeed = (equals(final_clearance, 0)) ? Speed(0, 0) : chosenSpeed;
-	ROS_INFO("Chosen speed: [v=%f, w=%f]", chosenSpeed.v, chosenSpeed.w);
 	return chosenSpeed;
 }
 #ifdef DEBUG
 /*
  * Sends out visualisation messages of the total cost function, heading, clearance, velocity and coupling.
  */
-void SharedDWA::visualiseCostFn() {
+void DWA::visualiseCostFn() {
 
 	G_ma.markers.clear();
 	heading_ma.markers.clear();
@@ -736,7 +582,7 @@ void SharedDWA::visualiseCostFn() {
 	coupling_ma.markers.clear();
 }
 
-void SharedDWA::addCostFn(Speed speed, float G, float heading, float clearance,
+void DWA::addCostFn(Speed speed, float G, float heading, float clearance,
 		float velocity, float coupling) {
 
 	float v = speed.v;
@@ -821,7 +667,7 @@ void SharedDWA::addCostFn(Speed speed, float G, float heading, float clearance,
 }
 #endif
 
-void SharedDWA::run() {
+void DWA::run() {
 	ros::Rate loop_rate(1 / dt);
 	int count = 10;
 	while (count-- > 0) {
@@ -831,14 +677,13 @@ void SharedDWA::run() {
 
 	Speed chosenSpeed;
 	int maxduration;
-	int aveduration;
-	count = 0;
-	MyTimer timer = MyTimer();
-
 	while (ros::ok()) {
-		timer.start();
+		high_resolution_clock::time_point t1 = high_resolution_clock::now();
 		chosenSpeed = computeNextVelocity(chosenSpeed);
-		timer.stop();
+		high_resolution_clock::time_point t2 = high_resolution_clock::now();
+		auto duration = duration_cast<microseconds>( t2 - t1 ).count();
+		if (duration > maxduration) maxduration = duration;
+		cout << "Max Duration" << maxduration << endl;
 
 		geometry_msgs::TwistStamped motorcmd;
 		motorcmd.header.stamp = ros::Time::now();
@@ -849,18 +694,12 @@ void SharedDWA::run() {
 		// Publish input corresponding to dwa resultant velocity
 		geometry_msgs::TwistStamped usercmd;
 		usercmd.header.stamp = motorcmd.header.stamp;
-		Speed userspeed = getRealSpeed(humanInput);
+		Speed userspeed = getRealSpeed(inputDist[0]);
 		usercmd.twist.linear.x = userspeed.v;
 		usercmd.twist.angular.z = userspeed.w;
 		usercommand_pub.publish(usercmd);
 		ros::spinOnce();
-		ros::spinOnce();
-		ros::spinOnce();
-		ros::spinOnce();
 		loop_rate.sleep();
-
-		cout << "DWA Max Duration: " << timer.getMaxDuration() << endl;
-		cout << "DWA Average Duration: " << timer.getAveDuration() << endl;
 	}
 
 }

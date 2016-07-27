@@ -2,8 +2,8 @@
  * SHARED DWA runs in its own thread.
  */
 
-#ifndef SHARED_DWA_H
-#define SHARED_DWA_H
+#ifndef LINEAR_DWA_H
+#define LINEAR_DWA_H
 
 #define  USE_MATH_DEFINES
 //#define 	DEBUG
@@ -21,101 +21,11 @@
 
 #include <math.h>
 #include <numeric>
-#define equals(x, y) (abs(x-y) < 0.001)
-#define INVALIDCMD -2
-
-#define MAX_LIN_VEL 0.1 //m/s
-#define MIN_LIN_VEL 0.05 //m/s
-
-#define MAX_ANG_VEL 1 //rads/s
-#define MIN_ANG_VEL 1 //rads/s
-
-#define NULL_POSE Pose(0,0,0)
-
-/*
- * Needed explicit parameters:
- * Wheelchair dimensions, centre of wheelchair motion,
- * occupancy gridsize,
- * wheelchair kinematic parameters such as acc, max speed,
- *
- */
-typedef enum {
-	Joystick, Button
-} InterfaceType; // We use this to inform on the probability distribution for the user's intention from input interface.
-struct Speed {
-	float v;
-	float w;
-
-	Speed(const Speed& speed) :
-			v(speed.v), w(speed.w) {
-	}
-	Speed(float vt, float wt) :
-			v(vt), w(wt) {
-	}
-	Speed() {
-		w = v = 0;
-	}
-
-	Speed operator*(float s) // copy/move constructor is called to construct arg
-					{
-				Speed speed = Speed();
-				speed.v = this->v * s;
-				speed.w = this->w * s;
-				return speed;
-			}
-		Speed operator+(Speed rhs) // copy/move constructor is called to construct arg
-				{
-			Speed speed = Speed();
-			speed.v = this->v + rhs.v;
-			speed.w = this->w + rhs.w;
-			return speed;
-		}
-
-		Speed operator-(Speed rhs) // copy/move constructor is called to construct arg
-					{
-				Speed speed = Speed();
-				speed.v = this->v - rhs.v;
-				speed.w = this->w - rhs.w;
-				return speed;
-			}
-		bool operator==(Speed s) // copy/move constructor is called to construct arg
-				{
-			if (equals(this->v,s.v) && equals(this->w, s.w)) {
-				return true;
-			} else {
-				return false;
-			}
-		}
-};
-
-struct Pose {
-	float x;
-	float y;
-	float th;
-	Pose(float xt, float yt, float tht) :
-			x(xt), y(yt), th(tht) {
-	}
-	bool operator==(Pose pose) // copy/move constructor is called to construct arg
-			{
-		if (equals(this->x,
-				pose.x) && equals(this->x, pose.x) && equals(this->x, pose.x)) {
-			return true;
-		} else {
-			return false;
-		}
-	}
-
-};
-
-struct DynamicWindow {
-	Speed upperbound;
-	Speed lowerbound;
-};
-
-class SharedDWA {
+#include "shared_dwa/helper.h"
+class LinearDWA {
 public:
-	SharedDWA(const char * topic, ros::NodeHandle &n_t);
-	~SharedDWA();
+	LinearDWA(ros::NodeHandle &n_t);
+	~LinearDWA();
 	void run();
 private:
 
@@ -128,6 +38,10 @@ private:
 	 */
 	float refresh_period; // rate at which we evaluate prediction as measures in counts representing time in seconds
 	DWAMap* dwa_map;
+
+	float gridsize; // The size in m of each occupancy grid.
+	float mapsize;
+	int noOfgrids; // number of grids in one side of the square occupancy.
 
 //------------ Motor Variables ---------------
 	Speed humanInput;
@@ -212,8 +126,6 @@ private:
 		}
 		return speed;
 	}
-	bool compareQuadrant(float ang, float upper, float lower);
-	int getQuadrant (float upper);
 // -------------DWA----------
 	/*
 	 * Angles made by normalised linear and angular velocities on an
@@ -233,9 +145,9 @@ private:
 	Speed computeNextVelocity(Speed chosenSpeed);
 // ---------------Trigonometry----------------------
 	float angDiff(float a1, float a2) {
-		float a = a1-a2;
+		float a = a1 - a2;
 		a = fmod((a + M_PI), (2 * M_PI)) - M_PI;
-		return wraparound(a);
+		return a;
 	}
 
 	float wraparound(float th) { // [-pi, pi]

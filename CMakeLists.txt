@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(shared_dwa)
-
+set(CMAKE_CXX_FLAGS "-std=c++0x -O3 ${CMAKE_CXX_FLAGS}")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   visualization_msgs
+  map
 )
 
 ## System dependencies are found with CMake's conventions
@@ -190,8 +191,8 @@ include_directories(
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
-include_directories(include ${catkin_INCLUDE_DIRS})
+include_directories(include ${catkin_INCLUDE_DIRS} ${maphelper_INCLUDE_DIRS})
 
 
 add_executable(shared_dwa src/main.cpp src/shared_dwa.cpp )
-target_link_libraries(shared_dwa LINK_PUBLIC ${catkin_LIBRARIES})
+target_link_libraries(shared_dwa LINK_PUBLIC ${catkin_LIBRARIES} ${maphelper_LIBRARIES})
