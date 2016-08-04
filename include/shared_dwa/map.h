@@ -1,3 +1,6 @@
+#ifndef MAP_H
+#define MAP_H
+
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "geometry_msgs/TwistStamped.h"
@@ -76,3 +79,4 @@ private:
 
 };
 typedef std::unique_ptr<DWAMap> DWAMapPtr;
+#endif

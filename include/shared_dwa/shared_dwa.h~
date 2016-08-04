@@ -19,13 +19,14 @@
 
 #include <math.h>
 #include <numeric>
-#include "shared_dwa/pose.h"
-#include "shared_dwa/speed.h"
 #include "shared_dwa/helper.h"
-#include "shared_dwa/map.h"
-
 #define INVALIDCMD -2
-using namespace std;
+
+#define MAX_LIN_VEL 0.1 //m/s
+#define MIN_LIN_VEL 0.05 //m/s
+
+#define MAX_ANG_VEL 1 //rads/s
+#define MIN_ANG_VEL 1 //rads/s
 
 
 class SharedDWA {
@@ -95,10 +96,7 @@ private:
 	DynamicWindow computeDynamicWindow(DynamicWindow dw);
 	vector<Speed> getResultantVelocities(vector<Speed> resultantVelocities, float upperbound, float lowerbound );
 	Speed computeNextVelocity(Speed chosenSpeed);
-	DeOscillator deOscillator;
-	void restrictVelocitySpace(float &upperbound, float &lowerbound,
-			Speed inputcmd);
-	void getData();
+
 
 }
 ;
