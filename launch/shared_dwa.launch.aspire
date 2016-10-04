@@ -1,0 +1,31 @@
+<launch>
+  <machine name="wheelchair" address="wheelchair" user="root" 
+    env-loader="/opt/ros/indigo/rosenv.sh" default="never" />
+
+  <machine name="remote" address="remote" user="ceezeh" 
+    env-loader="/home/ceezeh/catkin_ws/devel/env.sh" default="never" />
+<!-- 
+  <node name="px4flow" pkg="px4flow" type="px4flow_node" output="screen" respawn="true" clear_params="true" machine="wheelchair">
+       <rosparam file="$(find px4flow)/launch/px4flow_parameters.yaml"/>
+   </node>
+
+  <node pkg="visual_odometry" type="wheelchair_visual_odometry" name="visual_odometry" output="screen" machine="remote"/>
+-->
+  <node pkg="sonar_node" type="sonar" name="sonar" output="screen" machine="wheelchair" required="true"/>
+
+  <node pkg="visualise_occupancy" type="sonar_occupancy.py" name="Sonar_Occupancy" output="log" machine="remote"/>
+
+  <node pkg="visualise_occupancy" type="visualise_occupancy.py" name="Visualise_Occupancy" output="log" machine="remote"/>
+
+  <node pkg="controller_input" type="controller_input" name="controller_input"
+    output="log" machine="wheelchair">
+    <param name="interface" value="joystick" />
+  </node>
+
+  <node pkg="motion_controller" type="controller" name="Motion_Controller"
+    output="screen" machine="wheelchair"/>
+
+  <node pkg="shared_dwa" type="shared_dwa" name="Shared_DWA"
+    output="screen" machine="remote"  launch-prefix="xterm -e" required="true"/>
+  
+</launch>
