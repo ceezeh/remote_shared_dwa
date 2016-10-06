@@ -12,18 +12,17 @@
 #include "geometry_msgs/TwistStamped.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include <map/point.h>
+#include <map/helper.h>
 #include "nav_msgs/Odometry.h"
-#include "shared_dwa/arithmetic.h"
 #include "shared_dwa/pose.h"
 #include "shared_dwa/speed.h"
+
 
 
 #define NULL_POSE Pose(0,0,0)
 
 using namespace std;
 
-float angDiff(float a1, float a2);
-float wraparound(float th);
 float vectorNorm(Pose p);
 int getQuadrant (float upper);
 float vectorNorm(Pose p);

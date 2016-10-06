@@ -195,3 +195,5 @@ include_directories(include ${catkin_INCLUDE_DIRS} ${maphelper_INCLUDE_DIRS})
 
 add_executable(shared_dwa  src/helper.cpp  src/shared_dwa.cpp src/main.cpp)
 target_link_libraries(shared_dwa LINK_PUBLIC ${catkin_LIBRARIES} ${maphelper_LIBRARIES})
+
+

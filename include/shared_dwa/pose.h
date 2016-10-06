@@ -1,6 +1,6 @@
 #ifndef POSE_H
 #define POSE_H
-#include "shared_dwa/arithmetic.h"
+#include <map/helper.h>
 using namespace std;
 struct Pose {
 	float x;
@@ -14,8 +14,8 @@ struct Pose {
 	}
 	bool operator==(Pose pose) // copy/move constructor is called to construct arg
 			{
-		if (equals_t(this->x,
-				pose.x) && equals_t(this->x, pose.x) && equals_t(this->x, pose.x)) {
+		if (equals(this->x,
+				pose.x) && equals(this->x, pose.x) && equals(this->x, pose.x)) {
 			return true;
 		} else {
 			return false;

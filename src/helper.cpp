@@ -4,11 +4,11 @@ float DeOscillator::lin_dist_thres = .5;
 float DeOscillator::ang_dist_thres_lower = M_PI * 30 / 180;
 float DeOscillator::ang_dist_thres_upper = M_PI * 150 / 180;
 // ---------------Trigonometry----------------------
-float angDiff(float a1, float a2) {
-	float a = a1 - a2;
-	a = fmod((a + M_PI), (2 * M_PI)) - M_PI;
-	return wraparound(a);
-}
+//float angDiff(float a1, float a2) {
+//	float a = a1 - a2;
+//	a = fmod((a + M_PI), (2 * M_PI)) - M_PI;
+//	return wraparound(a);
+//}
 
 float vectorNorm(Pose p) {
 	std::vector<float> v { p.x, p.y };
@@ -88,18 +88,18 @@ void rotateFromBody(RealPoint &pose, Pose T) {
 	pose.y += T.y;
 }
 
-//Assumes lower to upper forms a continuous region.
-float wraparound (float ang) { // [-pi, pi]
-    if (equals_t(ang, 0) || equals_t(fabs(ang), M_PI)) return ang;
-    if ((ang <= M_PI)&& (ang>=-M_PI)) return ang;
-    if (ang > M_PI) {
-        ang -= 2*M_PI;
-    }
-    if (ang < -M_PI ) {
-        ang +=  2*M_PI;
-    }
-    return wraparound(ang);
-}
+////Assumes lower to upper forms a continuous region.
+//float wraparound (float ang) { // [-pi, pi]
+//    if (equals(ang, 0) || equals(fabs(ang), M_PI)) return ang;
+//    if ((ang <= M_PI)&& (ang>=-M_PI)) return ang;
+//    if (ang > M_PI) {
+//        ang -= 2*M_PI;
+//    }
+//    if (ang < -M_PI ) {
+//        ang +=  2*M_PI;
+//    }
+//    return wraparound(ang);
+//}
 bool isAngleInRegion(float ang, float upper, float lower) {
     upper = wraparound(upper);
     lower = wraparound(lower);

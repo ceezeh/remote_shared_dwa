@@ -21,18 +21,21 @@
  
   <node pkg="visualise_occupancy" type="visualise_occupancy.py" name="Visualise_Occupancy" output="log" machine="mainrobot3"/>
  
-  <node pkg="novintfalcon" type="novintfalconjoystick" name="novintfalconjoystick" machine="mainrobot3" required="true">
-   </node>
-   
   <node pkg="controller_input" type="controller_input" name="controller_input"
     output="log" machine="wheelchair3">
     <param name="interface" value="joystick" />
   </node>
-  -->
   <node pkg="sidewinder" type="sidewinderjoystickPosition" name="sidewinderjoystickPosition" machine="mainrobot3" required="true">
    </node>
    <node pkg="sidewinder" type="sidewinderjoystickForce" name="sidewinderjoystickForce" machine="mainrobot3" required="true">
    </node>
+    -->
+    <node pkg="controller_input" type="controller_input" name="controller_input"
+    output="log" machine="wheelchair3">
+    <param name="interface" value="joystick" />
+  </node>
+    
+    
   <node pkg="motion_controller" type="controller" name="controller"
     output="log" machine="wheelchair3" respawn="true"/>
 

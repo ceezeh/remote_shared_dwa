@@ -1,11 +1,11 @@
 #ifndef SPEED_H
 #define SPEED_H
-#include "shared_dwa/arithmetic.h"
-#define MAX_LIN_VEL 0.1 //m/s
-#define MIN_LIN_VEL 0.05 //m/s
+#include <map/helper.h>
+#define MAX_LIN_VEL 0.2 //m/s
+#define MIN_LIN_VEL 0.06 //m/s
 
-#define MAX_ANG_VEL 1 //rads/s
-#define MIN_ANG_VEL 1 //rads/s
+#define MAX_ANG_VEL .7 //rads/s
+#define MIN_ANG_VEL .7 //rads/s
 
 using namespace std;
 struct Speed {
@@ -45,7 +45,7 @@ struct Speed {
 		}
 	bool operator==(Speed s) // copy/move constructor is called to construct arg
 			{
-		if (equals_t(this->v,s.v) && equals_t(this->w, s.w)) {
+		if (equals(this->v,s.v) && equals(this->w, s.w)) {
 			return true;
 		} else {
 			return false;
