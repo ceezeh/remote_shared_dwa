@@ -1,5 +1,4 @@
 #include "ros/ros.h"
-#include "geometry_msgs/Twist.h"
 #include "geometry_msgs/TwistStamped.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/Odometry.h"
@@ -9,19 +8,14 @@
 #include <stdlib.h>
 #include <numeric>
 #include <map/helper.h>
+#include "shared_dwa/map.h"
 #include "shared_dwa/shared_dwa.h"
 #include <chrono>
 
 //#define LINEAR
-
-#define USER_CMD_BIT 2
-#define ODOM_BIT 1
-#define MAP_BIT 0
-
 using namespace std;
 using namespace std::chrono;
 
-int dataflag = 0;
 SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 
 	// Trajectories.
@@ -56,11 +50,13 @@ SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 	length_offset = .50;
 	width_offset = wc_width / 2;
 
-	humanInput = Speed(0.4, 0);
+	humanInput = Speed(0, 0);
 	odom = Speed(0, 0);
 	float gridsize = 0.05;
 	float mapsize = 4;
 	dwa_map = new DWAMap(gridsize, mapsize);
+
+	deOscillator = DeOscillator();
 	// ROS
 	n = n_t;
 	command_pub = n.advertise < geometry_msgs::TwistStamped
@@ -70,73 +66,56 @@ SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 	odom_sub = n.subscribe("odom", 10, &SharedDWA::odomCallback, this);
 	interface_sub = n.subscribe("user_command", 1,
 			&SharedDWA::usercommandCallback, this);
-	occupancy_sub = n.subscribe("localmap", 1, &SharedDWA::occupancyCallback,
+	occupancy_sub = n.subscribe("local_map", 1, &SharedDWA::occupancyCallback,
 			this);
-#ifdef DEBUG
-	G_pub = n.advertise<visualization_msgs::MarkerArray>("G_viz", 10);
-	heading_pub = n.advertise<visualization_msgs::MarkerArray>("heading_viz",
-			10);
-	clearance_pub = n.advertise<visualization_msgs::MarkerArray>(
-			"clearance_viz", 10);
-	velocity_pub = n.advertise<visualization_msgs::MarkerArray>("velocity_viz",
-			10);
-	coupling_pub = n.advertise<visualization_msgs::MarkerArray>("coupling_viz",
-			10);
-#endif
+
 	while (occupancy_sub.getNumPublishers() == 0)
 		;
-	sleep(10);
-
-	dataflag = 0;
-//	while (occupancy_sub.getNumPublishers() == 0)
-//		;
-//	sleep(5);
+	sleep(5);
 }
 
 SharedDWA::~SharedDWA() {
 	delete this->dwa_map;
 }
 
+
 void SharedDWA::odomCallback(const nav_msgs::Odometry& cmd) {
-	// Update dataflag.
-	dataflag |= (1 << ODOM_BIT);
+//	if (!equals(cmd.twist.twist.linear.x, INVALIDCMD)) {
 	// update v
 	this->odom.v = cmd.twist.twist.linear.x;
 #ifdef DEBUG
 	ROS_INFO("I heard something, v= %f", this->odom.v);
 #endif
+//	}
 
-
+//	if (!equals(cmd.twist.twist.angular.z, INVALIDCMD)) {
 	this->odom.w = cmd.twist.twist.angular.z; // scaling factor that maps user's command to real world units.
 #ifdef DEBUG
 			ROS_INFO("I heard something, w= %f", this->odom.w);
 #endif
-
-	deOscillator.updateOdom(cmd);
+//	}
+	deOscillator.updateOdom(cmd.pose.position.x,cmd.pose.position.y,cmd.pose.position.z);
 }
 
 void SharedDWA::occupancyCallback(const nav_msgs::OccupancyGrid& og) {
-	// Update dataflag.
-	dataflag |= (1 << MAP_BIT);
 	this->dwa_map->updateMap(og);
 
 }
 
 void SharedDWA::usercommandCallback(
 		const geometry_msgs::TwistStamped::ConstPtr& cmd) {
-	// Update dataflag.
-	dataflag |= (1 << USER_CMD_BIT);
-	if (!equals_t(cmd->twist.linear.x, INVALIDCMD)) {
+
+	if (!equals(cmd->twist.linear.x, INVALIDCMD)) {
 		// update v
-//		this->humanInput.v = .1;
+//		this->humanInput.v = .7;
 		this->humanInput.v = cmd->twist.linear.x;
 #ifdef DEBUG
 		ROS_INFO("I heard something, v= %f", this->humanInput.v);
 #endif
 	}
 
-	if (!equals_t(cmd->twist.angular.z, INVALIDCMD)) {
-//		this->humanInput.w = 0.5;
+	if (!equals(cmd->twist.angular.z, INVALIDCMD)) {
+//		this->humanInput.w = 0;
 		this->humanInput.w = cmd->twist.angular.z;
 #ifdef DEBUG
 		ROS_INFO("I heard something, w= %f", this->humanInput.w);
@@ -176,7 +155,7 @@ float SharedDWA::computeHeading(Speed usercommand, Speed candidateSpeed) {
 	// Compute heading here.
 	float heading = M_PI - angDiff(candididateth, goalth);
 	// Normalise heading to [0,1]
-	heading = wraparound(heading);
+	heading = this->wraparound(heading);
 	heading = fabs(heading) / M_PI;
 	return heading;
 }
@@ -242,17 +221,7 @@ float SharedDWA::computeDistToNearestObstacle(Speed candidateSpeed) {
 	}
 	return clearance;
 }
-// Assumes pose is to be rotated to a coordinate system with T as origin coordinate.
-void rotateFromBody(RealPoint &pose, Pose T) {
-	float x = pose.x;
-	float y = pose.y;
 
-	pose.x = cos(T.th) * x - sin(T.th) * y;
-	pose.y = sin(T.th) * x + cos(T.th) * y;
-
-	pose.x += T.x;
-	pose.y += T.y;
-}
 
 /*
  * Checks if there is any obstacle in the occupancy grid to obstruct the
@@ -328,9 +297,8 @@ vector<Speed> SharedDWA::getAdmissibleVelocities(vector<Speed> admissibles,
 	for (int i = 0; i < trajectories.size(); i++) {
 		// Construct a speed object from angle and find the clearance.
 
-//		if ((angDiff(trajectories[i], upperbound) > 0)
-//				|| (angDiff(trajectories[i], lowerbound) < 0)) {
-		if (!isAngleInRegion(trajectories[i], upperbound, lowerbound)) {
+		if ((angDiff(trajectories[i], upperbound) > 0)
+				|| (angDiff(trajectories[i], lowerbound) < 0)) {
 			admissibles.emplace_back(0, 0); // This is because the list of admissibles must match with the list of trajectories.
 			continue;
 		}
@@ -363,55 +331,7 @@ DynamicWindow SharedDWA::computeDynamicWindow(DynamicWindow dw) {
 	return dw;
 }
 
-//Assumes lower to upper forms a continuous region.
-int SharedDWA::getQuadrant (float upper) {
 
-	upper = wraparound(upper);
-
-		if ((upper>=0)&&(upper <M_PI/2)) {
-			return 0;
-		}
-
-			if ((upper>=M_PI/2)&&(upper <M_PI)) {
-				return 1;
-			}
-			if ((upper>=-M_PI)&&(upper <-M_PI/2)) {
-				return 2;
-			}
-			if ((upper>=-M_PI/2)&&(upper <0)){
-				return 3;
-			}
-}
-bool
-SharedDWA::compareQuadrant(float ang, float upper, float lower) {
-	// Find quadrant of region.
-	// Check first quadrant
-	// int code means 4321 bits regions for quadrants.
-	int8_t codeR = 0;
-	int8_t code = 0;
-	int8_t qstart = getQuadrant(lower);
-	int8_t qend = getQuadrant(upper);
-	qend ++;
-	if (qend == 4) {
-		qend = 0;
-	}
-	int8_t q = getQuadrant(ang);
-	bool in = false;
-	int8_t i =qstart;
-	while (i != qend ){
-		if (i == 4) {
-			i = 0;
-		}
-		if (q == i) {
-			in = true;
-			break;
-		}
-		i++;
-	}
-
-return in;
-
-}
 vector<Speed> SharedDWA::getResultantVelocities(
 		vector<Speed> resultantVelocities, float upperbound = M_PI + 1,
 		float lowerbound = -M_PI - 1) {
@@ -424,20 +344,17 @@ vector<Speed> SharedDWA::getResultantVelocities(
 
 	bool zeroVisited = false; // ensures that we add v=w= 0 only once.
 	for (int i = 0; i < trajectories.size(); i++) {
-		cout << "Trajectory Heading : " << trajectories[i] << endl;
-//		if ((angDiff(trajectories[i], upperbound) > 0)
-//				|| (angDiff(trajectories[i], lowerbound) < 0)) {
-//			continue;
-//		}
-		if (!isAngleInRegion(trajectories[i], upperbound, lowerbound))
+		if ((angDiff(trajectories[i], upperbound) > 0)
+				|| (angDiff(trajectories[i], lowerbound) < 0)) {
 			continue;
-		cout << "Passed trajectory Heading : " << trajectories[i] << endl;
+		}
+
 		// for very large tan, the data becomes skewed so just use the dw as boundary
 		//Here trajectory is either pi/2 or -PI/2
-		if (equals_t(abs(trajectories[i]), M_PI / 2)) {
+		if (equals(abs(trajectories[i]), M_PI / 2)) {
 			float vel = 0;
 			float upperbound_w, lowerbound_w;
-			if (equals_t(trajectories[i], M_PI / 2)) {
+			if (equals(trajectories[i], M_PI / 2)) {
 				upperbound_w = dw.upperbound.w;
 				lowerbound_w = (dw.lowerbound.w < 0) ? 0 : dw.lowerbound.w;
 			} else {
@@ -447,30 +364,15 @@ vector<Speed> SharedDWA::getResultantVelocities(
 			upperbound_w = min(upperbound_w, max_rot_vel);
 			lowerbound_w = max(lowerbound_w, min_rot_vel);
 			float stepw = (upperbound_w - lowerbound_w) / 6;
-//			cout << "upperbound: " << upperbound << "lowerbound" << lowerbound
-//					<< "upperbound_w: " << upperbound_w << "lowerbound_w"
-//					<< lowerbound_w << endl;
+
 			for (float w = lowerbound_w; w < upperbound_w; w += stepw) {
 				if ((w >= lowerbound_w) && ((w <= upperbound_w))) {
-//					cout
-//							<< "isAngleInRegion(atan2(w, vel), upperbound, lowerbound)"
-//							<< isAngleInRegion(atan2(w, vel), upperbound,
-//									lowerbound) << endl;
-					if (zeroVisited && equals_t(vel, 0) && equals_t(w, 0)) {
-						continue;
-					} else if (equals_t(vel, 0) && (equals_t(w, 0))) {
-						zeroVisited = true;
-					}
-					if (isAngleInRegion(atan2(w, vel), upperbound,
-							lowerbound)) {
+					if (compareQuadrant(atan2(w, vel), upperbound, lowerbound))
 						resultantVelocities.emplace_back(vel, w);
-
-					}
 				}
 			}
 			continue;
 		}
-
 
 		// For small tan near zero, w = 0
 
@@ -493,19 +395,14 @@ vector<Speed> SharedDWA::getResultantVelocities(
 			 * We are assuming focus within a narrow angle so that 0 and PI can not both be within focus.
 			 * Thus if zero is present, pi is not.
 			 */
-			if (isAngleInRegion(0, upperbound, lowerbound)) { // If 0 is present.
+			if (compareQuadrant(0, upperbound, lowerbound)) { // If 0 is present.
 				lowerbound_v = (lowerbound_v < 0) ? 0 : lowerbound_v;
 			} else {
 				upperbound_v = (upperbound_v > 0.0) ? 0 : upperbound_v;
 			}
-			float step = (upperbound_v - lowerbound_v) / 3;
+			float step = (upperbound_v - lowerbound_v) / 6;
 			for (float vel = lowerbound_v; vel <= upperbound_v; vel += step) {
-				if (zeroVisited && equals_t(vel, 0) && equals_t(w, 0)) {
-					continue;
-				} else if (equals_t(vel, 0) && (equals_t(w, 0))) {
-					zeroVisited = true;
-				}
-				if (isAngleInRegion(atan2(w, vel), upperbound, lowerbound))
+				if (compareQuadrant(atan2(w, vel), upperbound, lowerbound))
 					resultantVelocities.emplace_back(vel, w);
 			}
 			continue;
@@ -524,7 +421,7 @@ vector<Speed> SharedDWA::getResultantVelocities(
 		upperbound_v = min(upperbound_v, max_trans_vel);
 		lowerbound_v = max(lowerbound_v, min_trans_vel);
 
-		float step = (upperbound_v - lowerbound_v) / 3;
+		float step = (upperbound_v - lowerbound_v) / 6;
 		for (float vel = lowerbound_v; vel <= upperbound_v; vel += step) {
 
 			// For small tan near zero, w = 0
@@ -541,12 +438,12 @@ vector<Speed> SharedDWA::getResultantVelocities(
 			upperbound_w = min(upperbound_w, max_rot_vel);
 			lowerbound_w = max(lowerbound_w, min_rot_vel);
 			if ((w >= lowerbound_w) && ((w <= upperbound_w))) {
-				if (zeroVisited && equals_t(vel, 0) && equals_t(w, 0)) {
+				if (zeroVisited && equals(vel, 0) && equals(w, 0)) {
 					continue;
-				} else if (equals_t(vel, 0) && (equals_t(w, 0))) {
+				} else if (equals(vel, 0) && (equals(w, 0))) {
 					zeroVisited = true;
 				}
-				if (isAngleInRegion(atan2(w, vel), upperbound, lowerbound))
+				if (compareQuadrant(atan2(w, vel), upperbound, lowerbound))
 					resultantVelocities.emplace_back(vel, w);
 			}
 
@@ -563,31 +460,12 @@ vector<Speed> SharedDWA::getResultantVelocities(
 	return resultantVelocities;
 }
 
-void SharedDWA::restrictVelocitySpace(float &upperbound, float &lowerbound,
-		Speed input) {
-	float upperboundt, lowerboundt;
+
+void restrictVelocitySpace(float &upperbound, float &lowerbound, Speed inputcmd) {
 	deOscillator.getAdmissibleDirection(upperbound, lowerbound);
-	float ang = atan2(input.w, input.v);
 
-	upperboundt = ang + M_PI * 60 / 180;
-	upperboundt = wraparound(upperboundt);
-	lowerboundt = ang - M_PI * 60 / 180;
-	lowerboundt = wraparound(lowerboundt);
-
-	float upper, lower;
-	if (isAngleInRegion(upperboundt, upperbound, lowerbound)) {
-		upper = upperboundt;
-	} else {
-		upper = upperbound;
-	}
-	if (isAngleInRegion(lowerboundt, upperbound, lowerbound)) {
-		lower = lowerboundt;
-	} else {
-		lower = lowerbound;
-	}
-	upperbound = upper;
-	lowerbound = lower;
 }
+
 
 /*
  * This is the part that does the probabilistic conditioning based on the user's input.
@@ -611,12 +489,8 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 	float upperbound = -M_PI - 1;
 	float lowerbound = M_PI + 1;
 	Speed input = humanInput;
+	
 
-	restrictVelocitySpace(upperbound, lowerbound, input);
-//	deOscillator.getAdmissibleDirection(upperbound, lowerbound);
-	ROS_INFO("upperbound: %f, lowerbound: %f", upperbound, lowerbound);
-	resultantVelocities = getResultantVelocities(resultantVelocities,
-			upperbound, lowerbound);
 	float maxCost = 0;
 	float a = .1; // agreement factor between user command and resultant velocity. More means less agreement.
 	// Put weightings here.
@@ -624,8 +498,7 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 	float beta = 0.4;	// For clearance.
 	float gamma = 0.2;	// For velocity.
 	float final_clearance = 0;
-	cout << "Number of resultant velocities" << resultantVelocities.size()
-			<< endl;
+
 	for (int i = 0; i < resultantVelocities.size(); i++) {
 #ifdef LINEAR
 		Speed speed = resultantVelocities[i];
@@ -655,20 +528,12 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 		float coupling = expf(x);
 		float inputWeight = 1;
 		float cost = clearance * coupling * inputWeight;
-		Speed robotSpeed = normaliseSpeed(speed);
-		float ang = atan2(humanInput.w, humanInput.v);
-		float candidate_ang = atan2(robotSpeed.w, robotSpeed.v);
-//		ROS_INFO(
-//				"Input[v = %f, w= %f], Vel[v = %f, w= %f], clearance=%f, "
-//						" coupling = %f, cost = %f, input heading = %f, robot heading =%f",
-//				input.v, input.w, speed.v, speed.w, clearance, coupling, cost,
-//				ang, candidate_ang);
-#endif
-#ifdef DEBUG
+
 		Speed robotSpeed = normaliseSpeed(speed);
 		float candidate_ang = atan2(robotSpeed.w, robotSpeed.v);
 
-		ROS_INFO("Printing out DWA parameters for specific velocity ...");
+#ifdef DEBUG
+			ROS_INFO("Printing out DWA parameters for specific velocity ...");
 //			ROS_INFO(
 //					"Vel[v = %f, w= %f], Input[v = %f, w= %f], heading=%f, clearance=%f, "
 //							"velocity = %f, G = %f, coupling = %f, cost = %f",
@@ -692,30 +557,27 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 		}
 	}
 
-
-	chosenSpeed = (equals_t(final_clearance, 0)) ? Speed(0, 0) : chosenSpeed;
+	chosenSpeed = (equals(final_clearance, 0)) ? Speed(0, 0) : chosenSpeed;
 	ROS_INFO("Chosen speed: [v=%f, w=%f]", chosenSpeed.v, chosenSpeed.w);
 	return chosenSpeed;
 }
 
-void SharedDWA::getData() {
-	while (dataflag < 3 && ros::ok()) { // Data bits are arranged n order of testing priority.
-		ros::spinOnce();
-	}
-	dataflag = 0;
-}
 void SharedDWA::run() {
 	ros::Rate loop_rate(1 / dt);
+	int count = 10;
+	while (count-- > 0) {
+		ros::spinOnce();
+		loop_rate.sleep();
+	}
 
 	Speed chosenSpeed;
 	int maxduration;
-
 	int aveduration;
+	count = 0;
 	MyTimer timer = MyTimer();
 
 	while (ros::ok()) {
 		timer.start();
-		getData();
 		chosenSpeed = computeNextVelocity(chosenSpeed);
 		timer.stop();
 
@@ -725,14 +587,17 @@ void SharedDWA::run() {
 		motorcmd.twist.angular.z = chosenSpeed.w;
 		command_pub.publish(motorcmd);
 
-		// Publish input corresponding to DWA resultant velocity
+		// Publish input corresponding to dwa resultant velocity
 		geometry_msgs::TwistStamped usercmd;
-
 		usercmd.header.stamp = motorcmd.header.stamp;
 		Speed userspeed = getRealSpeed(humanInput);
 		usercmd.twist.linear.x = userspeed.v;
 		usercmd.twist.angular.z = userspeed.w;
 		usercommand_pub.publish(usercmd);
+		ros::spinOnce();
+		ros::spinOnce();
+		ros::spinOnce();
+		ros::spinOnce();
 		loop_rate.sleep();
 
 		cout << "DWA Max Duration: " << timer.getMaxDuration() << endl;

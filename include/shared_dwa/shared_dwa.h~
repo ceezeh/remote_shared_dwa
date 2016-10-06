@@ -19,8 +19,7 @@
 
 #include <math.h>
 #include <numeric>
-<<<<<<< HEAD
-#define equals(x, y) (abs(x-y) < 0.001)
+#include "shared_dwa/helper.h"
 #define INVALIDCMD -2
 
 #define MAX_LIN_VEL 0.1 //m/s
@@ -28,15 +27,6 @@
 
 #define MAX_ANG_VEL 1 //rads/s
 #define MIN_ANG_VEL 1 //rads/s
-=======
-#include "shared_dwa/pose.h"
-#include "shared_dwa/speed.h"
-#include "shared_dwa/helper.h"
-#include "shared_dwa/map.h"
->>>>>>> 4fe40d94807dc0918ca6567664966a60b5ae0759
-
-#define INVALIDCMD -2
-using namespace std;
 
 
 class SharedDWA {
@@ -84,69 +74,11 @@ private:
 
 	float wc_length, wc_width;
 	float vstep, wstep;
-<<<<<<< HEAD
-//	 ----------------------Visualisation------------------------
-#ifdef DEBUG
-	visualization_msgs::MarkerArray clearance_ma;
-	visualization_msgs::MarkerArray G_ma;
-	visualization_msgs::MarkerArray coupling_ma;
-	visualization_msgs::MarkerArray heading_ma;
-	visualization_msgs::MarkerArray velocity_ma;
-	ros::Publisher markerarray_pub;
-	ros::Publisher G_pub;
-	ros::Publisher heading_pub;
-	ros::Publisher clearance_pub;
-	ros::Publisher velocity_pub;
-	ros::Publisher coupling_pub;
-
-
-	void visualiseCostFn();
-	void addCostFn(Speed speed, float G, float heading, float clearance,
-			float velocity, float coupling);
-#endif
-=======
->>>>>>> 4fe40d94807dc0918ca6567664966a60b5ae0759
 	/*
 	 * These parameters are used for accessing the right back side of the wheelchair
 	 * as the start position to fill or check occupancy.
 	 */
 	float length_offset, width_offset;
-<<<<<<< HEAD
-
-	// inverse of normalise speed.
-	Speed getRealSpeed(Speed speed_old) {
-		Speed speed = Speed(speed_old);
-		if (speed.v >= 0) {
-			speed.v *= ( MAX_LIN_VEL);
-		} else {
-			speed.v *= ( MIN_LIN_VEL);
-		}
-		if (speed.w >= 0) {
-			speed.w *= ( MAX_ANG_VEL);
-		} else {
-			speed.w *= ( MIN_ANG_VEL);
-		}
-		return speed;
-	}
-
-	Speed normaliseSpeed(Speed speed_old) {
-		Speed speed = Speed(speed_old);
-		if (speed.v >= 0) {
-			speed.v /= ( MAX_LIN_VEL);
-		} else {
-			speed.v /= ( MIN_LIN_VEL);
-		}
-		if (speed.w >= 0) {
-			speed.w /= ( MAX_ANG_VEL);
-		} else {
-			speed.w /= ( MIN_ANG_VEL);
-		}
-		return speed;
-	}
-	bool compareQuadrant(float ang, float upper, float lower);
-	int getQuadrant (float upper);
-=======
->>>>>>> 4fe40d94807dc0918ca6567664966a60b5ae0759
 // -------------DWA----------
 	/*
 	 * Angles made by normalised linear and angular velocities on an
@@ -164,41 +96,7 @@ private:
 	DynamicWindow computeDynamicWindow(DynamicWindow dw);
 	vector<Speed> getResultantVelocities(vector<Speed> resultantVelocities, float upperbound, float lowerbound );
 	Speed computeNextVelocity(Speed chosenSpeed);
-<<<<<<< HEAD
-// ---------------Trigonometry----------------------
-	float angDiff(float a1, float a2) {
-		float a = a1-a2;
-		a = fmod((a + M_PI), (2 * M_PI)) - M_PI;
-		return wraparound(a);
-	}
 
-	float wraparound(float th) { // [-pi, pi]
-		if (th > M_PI)
-			th -= 2 * M_PI;
-		if (th < -M_PI)
-			th += 2 * M_PI;
-		return th;
-	}
-	float vectorNorm(Pose p) {
-		std::vector<float> v { p.x, p.y };
-		float res = inner_product(v.begin(), v.end(), v.begin(), 0.0f);
-		return sqrt(res);
-	}
-	float vectorNorm(Speed p) {
-		return sqrt(magSquared(p));
-	}
-	float magSquared(Speed p) {
-		std::vector<float> v { p.v, p.w };
-		float res = inner_product(v.begin(), v.end(), v.begin(), 0.0f);
-		return res;
-	}
-	float sqrt_approx(float z);
-=======
-	DeOscillator deOscillator;
-	void restrictVelocitySpace(float &upperbound, float &lowerbound,
-			Speed inputcmd);
-	void getData();
->>>>>>> 4fe40d94807dc0918ca6567664966a60b5ae0759
 
 }
 ;

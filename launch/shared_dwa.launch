@@ -1,4 +1,5 @@
 <launch>
+<<<<<<< HEAD
   <machine name="wheelchair2" address="wheelchair2" user="root" 
     env-loader="/opt/ros/indigo/rosenv.sh" default="never" />
 
@@ -29,6 +30,46 @@
     output="log" machine="wheelchair2" respawn="true"/>
 
   <node pkg="shared_dwa" type="shared_dwa" name="shared_dwa" machine="mainrobot2"  output="screen" >
+=======
+  <machine name="wheelchair3" address="wheelchair3" user="root" 
+    env-loader="/opt/ros/indigo/rosenv.sh" default="never" />
+
+  <machine name="mainrobot3" address="mainrobot3" user="rock" 
+    env-loader="/home/rock/catkin_ws/devel/env.sh" default="never" />
+ <!--
+  <machine name="remote3" address="remote3" user="ceezeh" 
+    env-loader="/home/ceezeh/catkin_ws/devel/env.sh" default="never" />
+  -->
+  <node pkg="sonar_node" type="sonar" name="sonar"  machine="wheelchair3" respawn="true"/>
+  
+  <node name="odometry" pkg="odometry" type="encoder_odometry.py"  respawn="true" machine="wheelchair3">
+       
+   </node>
+  
+  <node pkg="map" type="local_map" name="local_map" machine="mainrobot3" output="screen" required="true">
+  	<rosparam command="load" file="$(find map)/mymap.yaml" />
+  </node>
+ <!--
+ 
+  <node pkg="visualise_occupancy" type="visualise_occupancy.py" name="Visualise_Occupancy" output="log" machine="mainrobot3"/>
+ 
+  <node pkg="novintfalcon" type="novintfalconjoystick" name="novintfalconjoystick" machine="mainrobot3" required="true">
+   </node>
+   
+  <node pkg="controller_input" type="controller_input" name="controller_input"
+    output="log" machine="wheelchair3">
+    <param name="interface" value="joystick" />
+  </node>
+  -->
+  <node pkg="sidewinder" type="sidewinderjoystickPosition" name="sidewinderjoystickPosition" machine="mainrobot3" required="true">
+   </node>
+   <node pkg="sidewinder" type="sidewinderjoystickForce" name="sidewinderjoystickForce" machine="mainrobot3" required="true">
+   </node>
+  <node pkg="motion_controller" type="controller" name="controller"
+    output="log" machine="wheelchair3" respawn="true"/>
+
+  <node pkg="shared_dwa" type="shared_dwa" name="shared_dwa" machine="mainrobot3"  output="screen" >
+>>>>>>> 4fe40d94807dc0918ca6567664966a60b5ae0759
      <rosparam command="load" file="$(find shared_dwa)/shared_dwa.yaml"/>
    </node>
   
