@@ -1,4 +1,5 @@
 #include "ros/ros.h"
+#include "geometry_msgs/Twist.h"
 #include "geometry_msgs/TwistStamped.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/Odometry.h"
@@ -60,8 +61,6 @@ SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 	float gridsize = 0.05;
 	float mapsize = 4;
 	dwa_map = new DWAMap(gridsize, mapsize);
-
-	deOscillator = DeOscillator();
 	// ROS
 	n = n_t;
 	command_pub = n.advertise < geometry_msgs::TwistStamped
@@ -71,8 +70,22 @@ SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) {
 	odom_sub = n.subscribe("odom", 1, &SharedDWA::odomCallback, this);
 	interface_sub = n.subscribe("user_command", 1,
 			&SharedDWA::usercommandCallback, this);
-	occupancy_sub = n.subscribe("local_map", 1, &SharedDWA::occupancyCallback,
+	occupancy_sub = n.subscribe("localmap", 1, &SharedDWA::occupancyCallback,
 			this);
+#ifdef DEBUG
+	G_pub = n.advertise<visualization_msgs::MarkerArray>("G_viz", 10);
+	heading_pub = n.advertise<visualization_msgs::MarkerArray>("heading_viz",
+			10);
+	clearance_pub = n.advertise<visualization_msgs::MarkerArray>(
+			"clearance_viz", 10);
+	velocity_pub = n.advertise<visualization_msgs::MarkerArray>("velocity_viz",
+			10);
+	coupling_pub = n.advertise<visualization_msgs::MarkerArray>("coupling_viz",
+			10);
+#endif
+	while (occupancy_sub.getNumPublishers() == 0)
+		;
+	sleep(10);
 
 	dataflag = 0;
 //	while (occupancy_sub.getNumPublishers() == 0)
@@ -92,6 +105,7 @@ void SharedDWA::odomCallback(const nav_msgs::Odometry& cmd) {
 //#ifdef DEBUG
 	ROS_INFO("I heard something, v= %f", this->odom.v);
 //#endif
+
 
 	this->odom.w = cmd.twist.twist.angular.z; // scaling factor that maps user's command to real world units.
 //#ifdef DEBUG
@@ -228,6 +242,17 @@ float SharedDWA::computeDistToNearestObstacle(Speed candidateSpeed) {
 	}
 	return clearance;
 }
+// Assumes pose is to be rotated to a coordinate system with T as origin coordinate.
+void rotateFromBody(RealPoint &pose, Pose T) {
+	float x = pose.x;
+	float y = pose.y;
+
+	pose.x = cos(T.th) * x - sin(T.th) * y;
+	pose.y = sin(T.th) * x + cos(T.th) * y;
+
+	pose.x += T.x;
+	pose.y += T.y;
+}
 
 /*
  * Checks if there is any obstacle in the occupancy grid to obstruct the
@@ -338,6 +363,55 @@ DynamicWindow SharedDWA::computeDynamicWindow(DynamicWindow dw) {
 	return dw;
 }
 
+//Assumes lower to upper forms a continuous region.
+int SharedDWA::getQuadrant (float upper) {
+
+	upper = wraparound(upper);
+
+		if ((upper>=0)&&(upper <M_PI/2)) {
+			return 0;
+		}
+
+			if ((upper>=M_PI/2)&&(upper <M_PI)) {
+				return 1;
+			}
+			if ((upper>=-M_PI)&&(upper <-M_PI/2)) {
+				return 2;
+			}
+			if ((upper>=-M_PI/2)&&(upper <0)){
+				return 3;
+			}
+}
+bool
+SharedDWA::compareQuadrant(float ang, float upper, float lower) {
+	// Find quadrant of region.
+	// Check first quadrant
+	// int code means 4321 bits regions for quadrants.
+	int8_t codeR = 0;
+	int8_t code = 0;
+	int8_t qstart = getQuadrant(lower);
+	int8_t qend = getQuadrant(upper);
+	qend ++;
+	if (qend == 4) {
+		qend = 0;
+	}
+	int8_t q = getQuadrant(ang);
+	bool in = false;
+	int8_t i =qstart;
+	while (i != qend ){
+		if (i == 4) {
+			i = 0;
+		}
+		if (q == i) {
+			in = true;
+			break;
+		}
+		i++;
+	}
+
+return in;
+
+}
 vector<Speed> SharedDWA::getResultantVelocities(
 		vector<Speed> resultantVelocities, float upperbound = M_PI + 1,
 		float lowerbound = -M_PI - 1) {
@@ -396,6 +470,7 @@ vector<Speed> SharedDWA::getResultantVelocities(
 			}
 			continue;
 		}
+
 
 		// For small tan near zero, w = 0
 
@@ -619,6 +694,7 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 #ifndef LINEAR
 	chosenSpeed = (equals(final_clearance, 0)) ? Speed(0, 0) : chosenSpeed;
 #endif
+
 	ROS_INFO("Chosen speed: [v=%f, w=%f]", chosenSpeed.v, chosenSpeed.w);
 	return chosenSpeed;
 }
@@ -636,6 +712,7 @@ void SharedDWA::run() {
 
 	Speed chosenSpeed;
 	int maxduration;
+
 	int aveduration;
 	MyTimer timer = MyTimer();
 
@@ -651,8 +728,9 @@ void SharedDWA::run() {
 		motorcmd.twist.angular.z = chosenSpeed.w;
 		command_pub.publish(motorcmd);
 
-		// Publish input corresponding to dwa resultant velocity
+		// Publish input corresponding to DWA resultant velocity
 		geometry_msgs::TwistStamped usercmd;
+
 		usercmd.header.stamp = motorcmd.header.stamp;
 		Speed userspeed = getRealSpeed(humanInput);
 		usercmd.twist.linear.x = userspeed.v;

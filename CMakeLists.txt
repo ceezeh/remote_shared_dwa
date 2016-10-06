@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(shared_dwa)
+<<<<<<< HEAD
+set(CMAKE_CXX_FLAGS "-std=c++0x -O0 ${CMAKE_CXX_FLAGS}")
+=======
 set(CMAKE_CXX_FLAGS "-std=c++0x -O3 ${CMAKE_CXX_FLAGS}")
+>>>>>>> 4fe40d94807dc0918ca6567664966a60b5ae0759
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -192,8 +196,14 @@ include_directories(
 # catkin_add_nosetests(test)
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${maphelper_INCLUDE_DIRS})
+<<<<<<< HEAD
+
+
+add_executable(shared_dwa src/main.cpp src/shared_dwa.cpp )
+=======
 
 add_executable(shared_dwa  src/helper.cpp  src/shared_dwa.cpp src/main.cpp)
+>>>>>>> 4fe40d94807dc0918ca6567664966a60b5ae0759
 target_link_libraries(shared_dwa LINK_PUBLIC ${catkin_LIBRARIES} ${maphelper_LIBRARIES})
 
 
