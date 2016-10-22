@@ -32,7 +32,7 @@ float magSquared(Speed p);
 float sqrt_approx(float z);
 Speed getRealSpeed(Speed speed_old);
 Speed normaliseSpeed(Speed speed_old);
-void rotateFromBody(RealPoint &pose, Pose T);
+//void rotateFromBody(RealPoint &pose, Pose T);
 int getQuadrant(float upper);
 bool isAngleInRegion(float ang, float upper, float lower);
 //***********************************************************************//

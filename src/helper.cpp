@@ -77,16 +77,16 @@ Speed normaliseSpeed(Speed speed_old) {
 }
 
 // Assumes pose is to be rotated to a coordinate system with T as origin coordinate.
-void rotateFromBody(RealPoint &pose, Pose T) {
-	float x = pose.x;
-	float y = pose.y;
-
-	pose.x = cos(T.th) * x - sin(T.th) * y;
-	pose.y = sin(T.th) * x + cos(T.th) * y;
-
-	pose.x += T.x;
-	pose.y += T.y;
-}
+//void rotateFromBody(RealPoint &pose, Pose T) {
+//	float x = pose.x;
+//	float y = pose.y;
+//
+//	pose.x = cos(T.th) * x - sin(T.th) * y;
+//	pose.y = sin(T.th) * x + cos(T.th) * y;
+//
+//	pose.x += T.x;
+//	pose.y += T.y;
+//}
 
 ////Assumes lower to upper forms a continuous region.
 //float wraparound (float ang) { // [-pi, pi]
