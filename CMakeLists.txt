@@ -196,7 +196,13 @@ include_directories(
 include_directories(include ${catkin_INCLUDE_DIRS} ${maphelper_INCLUDE_DIRS} ${dwa_INCLUDE_DIRS})
 
 
-add_executable(shared_dwa  src/helper.cpp  src/shared_dwa.cpp src/main.cpp)
-target_link_libraries(shared_dwa ${catkin_LIBRARIES} ${maphelper_LIBRARIES} ${dwa_LIBRARIES})
+add_library(shared_dwa_lib  src/helper.cpp  src/shared_dwa.cpp)
+target_link_libraries(shared_dwa_lib ${catkin_LIBRARIES} ${maphelper_LIBRARIES} ${dwa_LIBRARIES})
+
+add_executable(shared_dwa  src/main.cpp)
+target_link_libraries(shared_dwa shared_dwa_lib )
+
+add_executable(linear_dwa  src/linear_dwa.cpp src/main_ldwa.cpp)
+target_link_libraries(linear_dwa shared_dwa_lib)
 
 
