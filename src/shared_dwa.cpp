@@ -19,7 +19,7 @@
 using namespace std;
 using namespace std::chrono;
 
-int dataflag = 0;
+
 SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) :
 		DWA(topic, n_t) {
 
@@ -66,12 +66,12 @@ void SharedDWA::getData() {
 			break;
 		}
 		ros::spinOnce();
-
 	}
 	if (!(dataflag & 1 << USER_CMD_BIT)) {
 		usercommandCallback(usercmd);
 	}
 	dataflag = 0;
+	cout <<" exiting data acquisition"<<endl;
 
 }
 /*
@@ -86,8 +86,10 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 
 	Speed humanInput = Speed(this->usercmd.twist.linear.x,
 			usercmd.twist.angular.z);
-	if (humanInput == Speed(0, 0))
+	if (humanInput == Speed(0, 0)){
+		cout <<"Stopping!";
 		return Speed(0, 0); // Stop!!
+		}
 
 	vector<Speed> resultantVelocities;
 	resultantVelocities.clear();
@@ -122,9 +124,7 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 
 		float velocity = computeVelocity(realspeed);
 		float G = alpha * heading + beta * clearance + gamma * velocity;
-#ifdef LINEAR
-		float cost = G;
-#else
+
 //			float velocity = computeVelocity(speed);
 //			float G = alpha * heading + beta * clearance + gamma * velocity;
 		// Compute preference for user's input
@@ -150,20 +150,15 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 				"velocity = %f, cost = %f, Goal Pose (x: %f, y: %f, th: %f)",
 				realspeed.v, realspeed.w, heading, clearance, velocity, cost,
 				goalpose.x, goalpose.y,goalpose.th);
-#endif
 		if (cost > maxCost) {
 			maxCost = cost;
-#ifdef LINEAR
-			chosenSpeed = (realspeed + input) * 0.5;
-#else
+
 			chosenSpeed = realspeed;
-#endif
+
 			final_clearance = clearance;
 		}
 	}
-#ifndef LINEAR
-	chosenSpeed = (equals(final_clearance, 0)) ? Speed(0, 0) : chosenSpeed;
-#endif
+
 
 	ROS_INFO("Chosen speed: [v=%f, w=%f]", chosenSpeed.v, chosenSpeed.w);
 	return chosenSpeed;

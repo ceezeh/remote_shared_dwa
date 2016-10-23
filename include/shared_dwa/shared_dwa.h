@@ -28,11 +28,13 @@ using namespace std;
 class SharedDWA: public DWA {
 public:
 	SharedDWA(const char * topic, ros::NodeHandle &n_t);
-private:
-
-	vector<Speed> inputDist;
-	//------------ Motor Variables ---------------
+protected:
+	// -------------DWA----------
+	virtual Speed computeNextVelocity(Speed chosenSpeed);
 	geometry_msgs::TwistStamped usercmd;
+private:
+	//------------ Motor Variables ---------------
+
 	ros::Publisher usercommand_pub;
 	ros::Subscriber interface_sub;
 
@@ -40,7 +42,6 @@ private:
 	void updateInputCommand(float v, float w, InterfaceType In);
 
 // -------------DWA----------
-	Speed computeNextVelocity(Speed chosenSpeed);
 	void getData();
 
 
