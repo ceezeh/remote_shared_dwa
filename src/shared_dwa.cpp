@@ -106,9 +106,12 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 	resultantVelocities = getResultantVelocities(resultantVelocities,
 			upperbound, lowerbound);
 	float maxCost = 0;
-	float a = 100; // agreement factor between user command and resultant velocity.
 	// More means permit less agreement. default .1 , 10 is more assistance. 100 much more asistance
-	// Put weightings here.
+		// Put weightings here
+	float a = 100; // agreement factor between user command and resultant velocity.
+	string topic = this->topic + "/coupling";
+	this->n.getParam(topic.c_str(), a);
+	cout << "COUPLING=" <<a<<endl;
 	float alpha = 0.5;	// For heading.
 	float beta = 0.4;	// For clearance.
 	float gamma = 1;	// For velocity.
@@ -147,9 +150,10 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 
 		ROS_INFO("Printing out SharedDWA parameters for specific velocity ...");
 		ROS_INFO("RealVel[v = %f, w= %f], heading=%f, clearance=%f, "
-				"velocity = %f, cost = %f, Goal Pose (x: %f, y: %f, th: %f)",
+				"velocity = %f, cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
 				realspeed.v, realspeed.w, heading, clearance, velocity, cost,
-				goalpose.x, goalpose.y,goalpose.th);
+				goalpose.x, goalpose.y,goalpose.th,odom_all.pose.pose.position.x, odom_all.pose.pose.position.y,
+				odom_all.pose.pose.position.z);
 		if (cost > maxCost) {
 			maxCost = cost;
 

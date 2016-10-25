@@ -1,0 +1,39 @@
+<launch>
+
+  <machine name="wheelchair" address="wheelchairEth" user="root" 
+    env-loader="/opt/ros/indigo/rosenv.sh" default="never" />
+
+  <machine name="mainrobot" address="mainrobot" user="rock" 
+    env-loader="/home/rock/catkin_ws/devel/env.sh" default="never" />
+ <!--
+  <machine name="remote" address="remote" user="ceezeh" 
+    env-loader="/home/ceezeh/catkin_ws/devel/env.sh" default="never" />
+
+  <node pkg="sonar_node" type="sonar" name="sonar"  machine="wheelchair" respawn="true"/>
+  
+  <node name="odometry" pkg="odometry" type="encoder_odometry.py"  respawn="true" machine="wheelchair">   
+   </node>
+
+  <node pkg="controller_input" type="controller_input" name="controller_input"
+    output="log" machine="wheelchair">
+    <param name="interface" value="joystick" />
+  </node>
+  
+  <node pkg="sidewinder" type="sidewinderjoystickPosition" name="sidewinderjoystickPosition" machine="mainrobot" required="true">
+   </node>
+   
+   <node pkg="sidewinder" type="sidewinderjoystickForce" name="sidewinderjoystickForce" machine="mainrobot" required="true">
+   </node>
+   
+ 	<node pkg="motion_controller" type="controller" name="controller"
+    output="log" machine="wheelchair" respawn="true"/>
+    
+    -->
+  <node pkg="map" type="local_map" name="local_map" machine="mainrobot" output="screen" required="true">
+  	<rosparam command="load" file="$(find map)/mymap.yaml" />
+  </node>
+  <node pkg="shared_dwa" type="linear_dwa" name="linear_dwa" machine="mainrobot"  output="screen" >
+     <rosparam command="load" file="$(find dwa)/dwa.yaml"/>
+   </node>
+  
+</launch>
