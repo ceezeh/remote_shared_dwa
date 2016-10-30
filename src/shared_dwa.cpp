@@ -128,8 +128,6 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 		float velocity = computeVelocity(realspeed);
 		float G = alpha * heading + beta * clearance + gamma * velocity;
 
-//			float velocity = computeVelocity(speed);
-//			float G = alpha * heading + beta * clearance + gamma * velocity;
 		// Compute preference for user's input
 		// 1 here is the weighting for that particular input speed,
 		// which will change in time!
@@ -141,17 +139,12 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 		Speed robotSpeed = normaliseSpeed(realspeed);
 		float ang = atan2(humanInput.w, humanInput.v);
 		float candidate_ang = atan2(robotSpeed.w, robotSpeed.v);
-//		ROS_INFO(
-//				"Input[v = %f, w= %f], Vel[v = %f, w= %f], clearance=%f, "
-//						" coupling = %f, cost = %f, input heading = %f, robot heading =%f",
-//				input.v, input.w, speed.v, speed.w, clearance, coupling, cost,
-//				ang, candidate_ang);
 
 
 		ROS_INFO("Printing out SharedDWA parameters for specific velocity ...");
 		ROS_INFO("RealVel[v = %f, w= %f], heading=%f, clearance=%f, "
-				"velocity = %f, cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
-				realspeed.v, realspeed.w, heading, clearance, velocity, cost,
+				"velocity = %f, coupling = %f, G = %f, cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
+				realspeed.v, realspeed.w, heading, clearance, velocity, coupling, G, cost,
 				goalpose.x, goalpose.y,goalpose.th,odom_all.pose.pose.position.x, odom_all.pose.pose.position.y,
 				odom_all.pose.pose.position.z);
 		if (cost > maxCost) {
