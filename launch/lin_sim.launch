@@ -32,9 +32,9 @@
   <node pkg="map" type="local_map" name="local_map" machine="mainrobot" output="screen" required="true">
   	<rosparam command="load" file="$(find map)/mymap.yaml" />
   </node>
-  <node pkg="shared_dwa" type="shared_dwa" name="shared_dwa" machine="mainrobot"  output="screen" >
+  <node pkg="shared_dwa" type="linear_dwa" name="linear_dwa" machine="mainrobot"  output="screen" >
+     <rosparam command="load" file="$(find map)/map.yaml"/>
      <rosparam command="load" file="$(find dwa)/dwa.yaml"/>
-     <rosparam command="load" file="$(find shared_dwa)/shared_dwa.yaml"/>
    </node>
   
 </launch>

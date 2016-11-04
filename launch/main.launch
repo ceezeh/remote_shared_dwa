@@ -1,0 +1,37 @@
+<launch>
+
+<!--
+<node pkg="sidewinder" type="sidewinderjoystickPosition" name="sidewinderjoystickPosition" machine="mainrobot" required="true">
+   </node>
+   
+   <node pkg="sidewinder" type="sidewinderjoystickForce" name="sidewinderjoystickForce" machine="mainrobot" required="true">
+   </node>
+   
+-->
+
+  <machine name="mainrobot" address="mainrobot" user="rock" 
+    env-loader="/home/rock/catkin_ws/devel/env.sh" default="never" />
+ 
+  <machine name="remote" address="remote" user="ceezeh" 
+    env-loader="/home/ceezeh/catkin_ws/devel/env.sh" default="never" />
+
+  <node pkg="shared_dwa" type="sonar.sh" name="sonar"  respawn="true"/>
+  
+  <node name="odometry" pkg="shared_dwa" type="odometry.sh"  respawn="true">   
+   </node>
+
+  <node pkg="shared_dwa" type="controller_input.sh" name="controller_input"
+    output="log">
+    <param name="interface" value="joystick" />
+  </node>
+  
+ <node pkg="shared_dwa" type="controller.sh" name="controller"
+   output="log" respawn="true"/>
+    
+  
+  
+</launch>
+
+
+
+

@@ -19,12 +19,11 @@
 using namespace std;
 using namespace std::chrono;
 
-
 SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) :
 		DWA(topic, n_t) {
 
-	usercommand_pub = n.advertise<geometry_msgs::TwistStamped>(
-			"user_command_logger", 100);
+	usercommand_pub = n.advertise < geometry_msgs::TwistStamped
+			> ("user_command_logger", 100);
 	interface_sub = n.subscribe("user_command", 1,
 			&SharedDWA::usercommandCallback, this);
 	this->DATA_COMPLETE = 3;
@@ -53,8 +52,8 @@ void SharedDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 	Pose currentpose = Pose(odom_all.pose.pose.position.x,
 			odom_all.pose.pose.position.y, odom_all.pose.pose.position.z);
 	// Now dx, dy are in the body frame and will need to be rotated to the global frame.
-		float xt = cos(currentpose.th)*dx -sin(currentpose.th)*dy;
-		float yt = sin(currentpose.th)*dx + cos(currentpose.th)*dy;
+	float xt = cos(currentpose.th) * dx - sin(currentpose.th) * dy;
+	float yt = sin(currentpose.th) * dx + cos(currentpose.th) * dy;
 	Pose newGoalPose = currentpose + Pose(xt, yt, th);
 	this->updateGoalPose(newGoalPose, th);
 
@@ -68,10 +67,10 @@ void SharedDWA::getData() {
 		ros::spinOnce();
 	}
 	if (!(dataflag & 1 << USER_CMD_BIT)) {
-		usercommandCallback(usercmd);
+		usercommandCallback (usercmd);
 	}
 	dataflag = 0;
-	cout <<" exiting data acquisition"<<endl;
+	cout << " exiting data acquisition" << endl;
 
 }
 /*
@@ -86,12 +85,12 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 
 	Speed humanInput = Speed(this->usercmd.twist.linear.x,
 			usercmd.twist.angular.z);
-	if (humanInput == Speed(0, 0)){
-		cout <<"Stopping!";
+	if (humanInput == Speed(0, 0)) {
+		cout << "Stopping!";
 		return Speed(0, 0); // Stop!!
-		}
+	}
 
-	vector<Speed> resultantVelocities;
+	vector < Speed > resultantVelocities;
 	resultantVelocities.clear();
 
 	/*
@@ -107,11 +106,11 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 			upperbound, lowerbound);
 	float maxCost = 0;
 	// More means permit less agreement. default .1 , 10 is more assistance. 100 much more asistance
-		// Put weightings here
+	// Put weightings here
 	float a = 100; // agreement factor between user command and resultant velocity.
 	string topic = this->topic + "/coupling";
 	this->n.getParam(topic.c_str(), a);
-	cout << "COUPLING=" <<a<<endl;
+	cout << "COUPLING=" << a << endl;
 	float alpha = 0.5;	// For heading.
 	float beta = 0.4;	// For clearance.
 	float gamma = 1;	// For velocity.
@@ -140,12 +139,13 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 		float ang = atan2(humanInput.w, humanInput.v);
 		float candidate_ang = atan2(robotSpeed.w, robotSpeed.v);
 
-
 		ROS_INFO("Printing out SharedDWA parameters for specific velocity ...");
-		ROS_INFO("RealVel[v = %f, w= %f], heading=%f, clearance=%f, "
-				"velocity = %f, coupling = %f, G = %f, cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
-				realspeed.v, realspeed.w, heading, clearance, velocity, coupling, G, cost,
-				goalpose.x, goalpose.y,goalpose.th,odom_all.pose.pose.position.x, odom_all.pose.pose.position.y,
+		ROS_INFO(
+				"RealVel[v = %f, w= %f], heading=%f, clearance=%f, "
+						"velocity = %f, coupling = %f, G = %f, cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
+				realspeed.v, realspeed.w, heading, clearance, velocity,
+				coupling, G, cost, goalpose.x, goalpose.y, goalpose.th,
+				odom_all.pose.pose.position.x, odom_all.pose.pose.position.y,
 				odom_all.pose.pose.position.z);
 		if (cost > maxCost) {
 			maxCost = cost;
@@ -155,7 +155,6 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 			final_clearance = clearance;
 		}
 	}
-
 
 	ROS_INFO("Chosen speed: [v=%f, w=%f]", chosenSpeed.v, chosenSpeed.w);
 	return chosenSpeed;

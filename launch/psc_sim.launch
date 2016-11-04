@@ -1,0 +1,13 @@
+<launch>
+
+<include file="$(find map)/launch/sim_map.launch"/>
+
+  
+  <node pkg="shared_dwa" type="shared_dwa" name="shared_dwa" output="screen" >
+  	<rosparam command="load" file="$(find map)/map.yaml"/>
+     <rosparam command="load" file="$(find dwa)/dwa.yaml"/>
+     <rosparam command="load" file="$(find shared_dwa)/shared_dwa.yaml"/>
+   </node>
+  
+</launch>
+
