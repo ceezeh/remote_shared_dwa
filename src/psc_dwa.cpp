@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <numeric>
 #include <map/helper.h>
-#include "shared_dwa/shared_dwa.h"
+#include "shared_dwa/psc_dwa.h"
 #include <chrono>
 
 //#define LINEAR
@@ -19,17 +19,17 @@
 using namespace std;
 using namespace std::chrono;
 
-SharedDWA::SharedDWA(const char * topic, ros::NodeHandle &n_t) :
+PSCDWA::PSCDWA(const char * topic, ros::NodeHandle &n_t) :
 		DWA(topic, n_t) {
 
 	usercommand_pub = n.advertise < geometry_msgs::TwistStamped
 			> ("user_command_logger", 100);
 	interface_sub = n.subscribe("user_command", 1,
-			&SharedDWA::usercommandCallback, this);
+			&PSCDWA::usercommandCallback, this);
 	this->DATA_COMPLETE = 3;
 }
 
-void SharedDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
+void PSCDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 
 	//-------------------------------------------------------
 	// Update dataflag.
@@ -59,7 +59,7 @@ void SharedDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 
 }
 
-void SharedDWA::getData() {
+void PSCDWA::getData() {
 	while (dataflag != this->DATA_COMPLETE && ros::ok()) { // Data bits are arranged n order of testing priority.
 		if (dataflag & 1 << USER_CMD_BIT) {
 			break;
@@ -81,7 +81,7 @@ void SharedDWA::getData() {
  * Let G (v,w) = Fn( �� �� heading + ����clearance + ����velocity), where Fn is arbitrary.
  * C = G(v,w) ��� exp(-1/(2*s)*(f-h)(f-h)') ���  W(H), for each of our possible goal location.
  */
-Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
+Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 
 	Speed humanInput = Speed(this->usercmd.twist.linear.x,
 			usercmd.twist.angular.z);
@@ -111,7 +111,7 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 	string topic = this->topic + "/coupling";
 	this->n.getParam(topic.c_str(), a);
 	cout << "COUPLING=" << a << endl;
-	float alpha = 0.5;	// For heading.
+	float alpha = 0.1;	// For heading.
 	float beta = 0.4;	// For clearance.
 	float gamma = 1;	// For velocity.
 	float final_clearance = 0;
@@ -139,7 +139,7 @@ Speed SharedDWA::computeNextVelocity(Speed chosenSpeed) {
 		float ang = atan2(humanInput.w, humanInput.v);
 		float candidate_ang = atan2(robotSpeed.w, robotSpeed.v);
 
-		ROS_INFO("Printing out SharedDWA parameters for specific velocity ...");
+		ROS_INFO("Printing out PSCDWA parameters for specific velocity ...");
 		ROS_INFO(
 				"RealVel[v = %f, w= %f], heading=%f, clearance=%f, "
 						"velocity = %f, coupling = %f, G = %f, cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",

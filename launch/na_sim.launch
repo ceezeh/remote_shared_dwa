@@ -1,0 +1,14 @@
+<launch>
+
+<include file="$(find map)/launch/sim_map.launch"/>
+
+  
+  <node pkg="shared_dwa" type="noassist" name="noassist" output="screen" >
+  	<rosparam command="load" file="$(find shared_dwa)/sim.yaml"/>
+  </node>
+  <node pkg="shared_dwa" type="controller_input.sh" name="controller_input"
+    output="screen">
+    <param name="interface" value="joystick" />
+  </node>
+  <include file="$(find datalogger)/launch/datalogger.launch"/>  
+</launch>

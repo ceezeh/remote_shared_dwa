@@ -55,7 +55,8 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 				goalpose.x, goalpose.y, goalpose.th);
 		if (cost > maxCost) {
 			maxCost = cost;
-			chosenSpeed= Speed(input.v, realspeed.w);
+			//chosenSpeed= Speed(input.v, realspeed.w);
+			chosenSpeed = (input+realspeed)*0.5;
 			final_clearance = clearance;
 		}
 

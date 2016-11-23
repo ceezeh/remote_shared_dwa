@@ -8,16 +8,16 @@
    </node>
    
 -->
-
+  <include file="$(find datalogger)/launch/datalogger.launch"/>
   <machine name="mainrobot" address="mainrobot" user="rock" 
     env-loader="/home/rock/catkin_ws/devel/env.sh" default="never" />
  
   <machine name="remote" address="remote" user="ceezeh" 
     env-loader="/home/ceezeh/catkin_ws/devel/env.sh" default="never" />
 
-  <node pkg="shared_dwa" type="sonar.sh" name="sonar"  respawn="true"/>
+  <node pkg="shared_dwa" type="sonar.sh" name="sonar" output="log"  respawn="true"/>
   
-  <node name="odometry" pkg="shared_dwa" type="odometry.sh"  respawn="true">   
+  <node name="odometry" pkg="shared_dwa" output="log" type="odometry.sh"  respawn="true">   
    </node>
 
   <node pkg="shared_dwa" type="controller_input.sh" name="controller_input"

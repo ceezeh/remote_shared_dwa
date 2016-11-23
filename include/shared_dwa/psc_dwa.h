@@ -2,8 +2,8 @@
  * SHARED DWA runs in its own thread.
  */
 
-#ifndef SHARED_DWA_H
-#define SHARED_DWA_H
+#ifndef PSC_DWA_H
+#define PSC_DWA_H
 
 #define  USE_MATH_DEFINES
 //#define 	DEBUG
@@ -25,9 +25,9 @@
 using namespace std;
 
 
-class SharedDWA: public DWA {
+class PSCDWA: public DWA {
 public:
-	SharedDWA(const char * topic, ros::NodeHandle &n_t);
+	PSCDWA(const char * topic, ros::NodeHandle &n_t);
 protected:
 	// -------------DWA----------
 	virtual Speed computeNextVelocity(Speed chosenSpeed);
