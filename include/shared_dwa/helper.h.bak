@@ -15,8 +15,8 @@
 #include <map/point.h>
 #include <map/helper.h>
 #include "nav_msgs/Odometry.h"
-#include "shared_dwa/pose.h"
-#include "shared_dwa/speed.h"
+#include <dwa/pose.h>
+#include <dwa/speed.h>
 
 
 

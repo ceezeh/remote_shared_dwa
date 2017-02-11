@@ -15,7 +15,7 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 	if (humanInput == Speed(0, 0))
 		return Speed(0, 0); // Stop!!
 
-	vector<Speed> resultantVelocities;
+	concurrent_vector<Speed> resultantVelocities;
 	resultantVelocities.clear();
 
 	/*
@@ -31,7 +31,7 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 			upperbound, lowerbound);
 	float maxCost = 0;
 	// Put weightings here.
-	float alpha = 0.5;	// For heading.
+	float alpha = 0.02;	// For heading.
 	float beta = 0.4;	// For clearance.
 	float gamma = 1;	// For velocity.
 	float final_clearance = 0;
@@ -42,7 +42,7 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 		Speed realspeed = resultantVelocities[i];
 		const Pose goalpose = this->getGoalPose();
 		float heading = computeHeading(realspeed, goalpose);
-		float clearance = computeClearance(realspeed);
+		float clearance = computeClearance(realspeed,i);
 
 		float velocity = computeVelocity(realspeed);
 		float G = alpha * heading + beta * clearance + gamma * velocity;

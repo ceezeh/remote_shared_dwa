@@ -2,11 +2,12 @@
 
 <include file="$(find map)/launch/sim_map.launch"/>
 
- 
+<!-- 
  <node pkg="shared_dwa" type="controller_input.sh" name="controller_input"
     output="log">
     <param name="interface" value="joystick" />
   </node>
+-->
 
   <node pkg="shared_dwa" type="psc_dwa" name="psc_dwa" output="screen" >
   	<rosparam command="load" file="$(find map)/map.yaml"/>
@@ -14,7 +15,8 @@
      <rosparam command="load" file="$(find shared_dwa)/psc_dwa.yaml"/>
 	<rosparam command="load" file="$(find shared_dwa)/sim.yaml"/>
    </node>
-  
+ <!-- 
  <include file="$(find datalogger)/launch/datalogger.launch"/>
+-->
 </launch>
 
