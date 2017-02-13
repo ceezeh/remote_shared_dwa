@@ -30,6 +30,43 @@ PSCDWA::PSCDWA(const char * topic, ros::NodeHandle &n_t) :
 	this->DATA_COMPLETE = 3;
 }
 
+void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
+
+	float std = M_PI / 2.2;
+	float var = std * std; //(pi/5)^2
+	Distribution p;
+	p.speed = input;
+	p.pval = 1 / pow(2 * M_PI * var, 0.5);
+
+	//If straight backward or forward, return only one value.
+	candidates.emplace_back(p);
+
+	if (!equals(input.w, 0)) {
+		// find magnitude and angle.
+		float th_0 = atan2(input.w, input.v);
+		float mag = vectorNorm(input);
+		int step = 3;
+		float d = std / step;
+		for (float dth = d; dth <= std; dth += d) {
+			float th = th_0 - dth;
+			float v = cos(th) * mag;
+			float w = sin(th) * mag;
+			float pval = exp(-dt * dt / (2 * var)) / pow(2 * var * M_PI, 0.5);
+			Distribution p;
+			p.speed = Speed(v, w);
+			p.pval = pval;
+			candidates.emplace_back(p);
+
+			th = th_0 + dth;
+			v = cos(th) * mag;
+			w = sin(th) * mag;
+			p.speed = Speed(v, w);
+			candidates.emplace_back(p);
+
+		}
+	}
+	cout<<"emplacing input vel....."<< endl;
+}
 void PSCDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 
 //	this->usercmd.twist.linear.x=1;
@@ -46,7 +83,7 @@ void PSCDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 	// Here, we estimate the goal pose from the user command.
 	float dx, dy, th;
 	th = atan2(humanInput.w, humanInput.v);
-	float length = 1;	// As in 1 meter.
+	float length = 2;	// As in 1 meter.
 	dx = length * cos(th);
 	dy = length * sin(th);
 	// Here we are assuming the robot will use this speed for the next few time steps. // This could be because of latency
@@ -58,8 +95,8 @@ void PSCDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 	float xt = cos(currentpose.th) * dx - sin(currentpose.th) * dy;
 	float yt = sin(currentpose.th) * dx + cos(currentpose.th) * dy;
 	Pose newGoalPose = currentpose;
-	if (!(equals(humanInput.v,0) && equals(humanInput.w,0)))
-		newGoalPose= newGoalPose+Pose(xt, yt, th);
+	if (!(equals(humanInput.v,0) && equals(humanInput.w, 0)))
+		newGoalPose = newGoalPose + Pose(xt, yt, th);
 	this->updateGoalPose(newGoalPose, th);
 
 }
@@ -103,7 +140,6 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	 */
 	float upperbound = -M_PI - 1;
 	float lowerbound = M_PI + 1;
-	Speed input = humanInput;
 
 	deOscillator.getAdmissibleDirection(upperbound, lowerbound);
 	ROS_INFO("upperbound: %f, lowerbound: %f", upperbound, lowerbound);
@@ -116,9 +152,9 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	string topic = this->topic + "/coupling";
 	this->n.getParam(topic.c_str(), a);
 	cout << "COUPLING=" << a << endl;
-	float inva = 1/a;
+	float inva = 1 / a;
 	float alpha = 0.02;	// For heading.
-	float beta = 0.4;	// For clearance.
+	float beta = 0.2;	// For clearance.
 	float gamma = 1;	// For velocity.
 	float final_clearance = 0;
 	cout << "Number of resultant velocities" << resultantVelocities.size()
@@ -127,52 +163,67 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	ROS_INFO("PSC222 Max Duration: %d", timer.getMaxDuration());
 	ROS_INFO("PSC222 Average Duration: %d ", timer.getAveDuration());
 	ROS_INFO("PSC222 Last Duration: %d ", timer.getLastDuration());
+
+	vector<Distribution> inputDistribution;
+	inputDistribution.clear();
+	getInputCandidates(humanInput, inputDistribution);
+
 	std::mutex mylock;
+	cout << "Number of input candidates" << inputDistribution.size()
+				<< endl;
 #pragma omp parallel for
-	for (int i = 0; i < resultantVelocities.size(); i++) {
-		timer.start();
-		Speed realspeed = resultantVelocities[i];
-		const Pose goalpose = this->getGoalPose();
-		float heading = computeHeading(realspeed, goalpose);
-		float clearance = computeClearance(realspeed,i);
+	for (int j = 0; j < inputDistribution.size(); j++) {
+		for (int i = 0; i < resultantVelocities.size(); i++) {
+			timer.start();
+			Distribution d = inputDistribution[j];
+			Speed input = d.speed;
 
-		float velocity = computeVelocity(realspeed);
-		float G = alpha * heading + beta * clearance +gamma *velocity;
+			Speed realspeed = resultantVelocities[i];
+			const Pose goalpose = this->getGoalPose();
+			float heading = computeHeading(realspeed, goalpose);
+			float clearance = computeClearance(realspeed, i);
+			if (equals(clearance, 0))
+				continue;
+			float velocity = computeVelocity(realspeed);
+			float G = alpha * heading + beta * clearance + gamma * velocity;
 
-		// Compute preference for user's input
-		// 1 here is the weighting for that particular input speed,
-		// which will change in time!
-		Speed temp = normaliseSpeed(realspeed) - humanInput;
-		float x = magSquared(temp);
-		x *= -0.5 *inva;
-		float coupling = expf(x);
-		float cost = G * coupling;
+			// Compute preference for user's input
+			// 1 here is the weighting for that particular input speed,
+			// which will change in time!
+			Speed temp = normaliseSpeed(realspeed) - humanInput;
+			float x = magSquared(temp);
+			x *= -0.5 * inva;
+			float coupling = expf(x);
+			float cost = G * coupling;
 
-		ROS_INFO("Printing out PSCDWA parameters for specific velocity ...");
-		ROS_INFO("Candidate Vel[v = %f, w= %f], Norm Candidate Vel[v = %f, w= %f],"
-						"Inpt Vel[v = %f, w= %f]  heading=%f, clearance=%f, "
-						"velocity = %f, coupling = %f, G = %f,"
-						"cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
-				realspeed.v, realspeed.w, temp.v, temp.w, humanInput.v,
-				humanInput.w, heading, clearance, velocity, coupling, G, cost,
-				goalpose.x, goalpose.y, goalpose.th,
-				odom_all.pose.pose.position.x, odom_all.pose.pose.position.y,
-				odom_all.pose.pose.position.z);
-		mylock.lock();
-		if (cost > maxCost) {
-			maxCost = cost;
+			ROS_INFO(
+					"Printing out PSCDWA parameters for specific velocity ...");
+			ROS_INFO(
+					"Candidate Vel[v = %f, w= %f], Norm Candidate Vel[v = %f, w= %f],"
+							"Inpt Vel[v = %f, w= %f]  heading=%f, clearance=%f, "
+							"velocity = %f, coupling = %f, G = %f,"
+							"cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
+					realspeed.v, realspeed.w, temp.v, temp.w, humanInput.v,
+					humanInput.w, heading, clearance, velocity, coupling, G,
+					cost, goalpose.x, goalpose.y, goalpose.th,
+					odom_all.pose.pose.position.x,
+					odom_all.pose.pose.position.y,
+					odom_all.pose.pose.position.z);
+			mylock.lock();
+			if (cost > maxCost) {
+				maxCost = cost;
 
-			chosenSpeed = realspeed;
+				chosenSpeed = realspeed;
 
-			final_clearance = clearance;
+				final_clearance = clearance;
+			}
+			mylock.unlock();
+			timer.stop();
+			ROS_INFO("PSC Max Duration: %d", timer.getMaxDuration());
+			ROS_INFO("PSC Average Duration: %d ", timer.getAveDuration());
+			ROS_INFO("PSC Last Duration: %d ", timer.getLastDuration());
 		}
-		mylock.unlock();
-		timer.stop();
-		ROS_INFO("PSC Max Duration: %d", timer.getMaxDuration());
-		ROS_INFO("PSC Average Duration: %d ", timer.getAveDuration());
-		ROS_INFO("PSC Last Duration: %d ", timer.getLastDuration());
 	}
-
 
 	ROS_INFO("Chosen speed: [v=%f, w=%f]", chosenSpeed.v, chosenSpeed.w);
 	return chosenSpeed;

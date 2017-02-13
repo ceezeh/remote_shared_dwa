@@ -21,6 +21,8 @@
 #include <numeric>
 #include <dwa/dwa.h>
 
+typedef struct {Speed speed;float pval;} Distribution;
+
 #define INVALIDCMD -2
 using namespace std;
 
@@ -31,7 +33,9 @@ public:
 protected:
 	// -------------DWA----------
 	virtual Speed computeNextVelocity(Speed chosenSpeed);
+	void getInputCandidates(Speed input, vector<Distribution> &candidates);
 	geometry_msgs::TwistStamped usercmd;
+
 private:
 	//------------ Motor Variables ---------------
 
@@ -43,8 +47,6 @@ private:
 
 // -------------DWA----------
 	void getData();
-
-
 }
 ;
 

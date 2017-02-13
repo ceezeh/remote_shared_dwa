@@ -32,7 +32,7 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 	float maxCost = 0;
 	// Put weightings here.
 	float alpha = 0.02;	// For heading.
-	float beta = 0.4;	// For clearance.
+	float beta = 0.2;	// For clearance.
 	float gamma = 1;	// For velocity.
 	float final_clearance = 0;
 	cout << "Number of resultant velocities" << resultantVelocities.size()
@@ -56,8 +56,10 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 		if (cost > maxCost) {
 			maxCost = cost;
 			//chosenSpeed= Speed(input.v, realspeed.w);
-			chosenSpeed = (input+realspeed)*0.5;
+//			chosenSpeed = (input+realspeed)*0.5;
 			final_clearance = clearance;
+			float a =  exp(-0.2*clearance);
+			chosenSpeed = realspeed*a +input*(1-a);
 		}
 
 	}
