@@ -31,10 +31,23 @@ PSCDWA::PSCDWA(const char * topic, ros::NodeHandle &n_t) :
 }
 
 void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
-
-	float std = M_PI / 2.2;
-	float var = std * std; //(pi/5)^2
 	Distribution p;
+	float std = 0;
+	if (this->usercmd.header.frame_id == "JS") {
+		p.speed = input;
+		p.pval = 1;
+
+		//If straight backward or forward, return only one value.
+		candidates.emplace_back(p);
+		return;
+	} else if (this->usercmd.header.frame_id == "HA") {
+		std = M_PI / 2.2;
+	} else if (this->usercmd.header.frame_id == "SP") {
+		std = M_PI / 3;
+	}
+
+	float var = std * std; //(pi/5)^2
+
 	p.speed = input;
 	p.pval = 1 / pow(2 * M_PI * var, 0.5);
 
@@ -48,6 +61,8 @@ void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
 		int step = 3;
 		float d = std / step;
 		for (float dth = d; dth <= std; dth += d) {
+			if (equals(dth, 0))
+				continue;
 			float th = th_0 - dth;
 			float v = cos(th) * mag;
 			float w = sin(th) * mag;
@@ -65,7 +80,7 @@ void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
 
 		}
 	}
-	cout<<"emplacing input vel....."<< endl;
+	cout << "emplacing input vel....." << endl;
 }
 void PSCDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 
@@ -111,6 +126,7 @@ void PSCDWA::getData() {
 	if (!(dataflag & 1 << USER_CMD_BIT)) {
 		usercommandCallback(usercmd);
 	}
+	usercommand_pub.publish(this->usercmd);
 	dataflag = 0;
 	cout << " exiting data acquisition" << endl;
 
@@ -127,6 +143,7 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	timer.start();
 	Speed humanInput = Speed(this->usercmd.twist.linear.x,
 			usercmd.twist.angular.z);
+
 	if (humanInput == Speed(0, 0)) {
 		cout << "Stopping!";
 		return Speed(0, 0); // Stop!!
@@ -153,9 +170,9 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	this->n.getParam(topic.c_str(), a);
 	cout << "COUPLING=" << a << endl;
 	float inva = 1 / a;
-	float alpha = 0.02;	// For heading.
-	float beta = 0.2;	// For clearance.
-	float gamma = 1;	// For velocity.
+	float alpha = .02;		// For heading.
+	float beta = .11;		// For clearance.
+	float gamma = 1;		// For velocity.
 	float final_clearance = 0;
 	cout << "Number of resultant velocities" << resultantVelocities.size()
 			<< endl;
@@ -169,8 +186,7 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	getInputCandidates(humanInput, inputDistribution);
 
 	std::mutex mylock;
-	cout << "Number of input candidates" << inputDistribution.size()
-				<< endl;
+	cout << "Number of input candidates" << inputDistribution.size() << endl;
 #pragma omp parallel for
 	for (int j = 0; j < inputDistribution.size(); j++) {
 		for (int i = 0; i < resultantVelocities.size(); i++) {
@@ -181,7 +197,7 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 			Speed realspeed = resultantVelocities[i];
 			const Pose goalpose = this->getGoalPose();
 			float heading = computeHeading(realspeed, goalpose);
-			float clearance = computeClearance(realspeed, i);
+			float clearance = computeClearance(realspeed);
 			if (equals(clearance, 0))
 				continue;
 			float velocity = computeVelocity(realspeed);

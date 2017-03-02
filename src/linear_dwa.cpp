@@ -12,6 +12,7 @@ using namespace std;
 Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 	Speed humanInput = Speed(this->usercmd.twist.linear.x,
 			usercmd.twist.angular.z);
+
 	if (humanInput == Speed(0, 0))
 		return Speed(0, 0); // Stop!!
 
@@ -42,7 +43,7 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 		Speed realspeed = resultantVelocities[i];
 		const Pose goalpose = this->getGoalPose();
 		float heading = computeHeading(realspeed, goalpose);
-		float clearance = computeClearance(realspeed,i);
+		float clearance = computeClearance(realspeed);
 
 		float velocity = computeVelocity(realspeed);
 		float G = alpha * heading + beta * clearance + gamma * velocity;
