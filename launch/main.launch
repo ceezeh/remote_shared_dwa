@@ -1,34 +1,38 @@
 <launch>
 
-<!--
-<node pkg="sidewinder" type="sidewinderjoystickPosition" name="sidewinderjoystickPosition" machine="mainrobot" required="true">
-   </node>
-   
-   <node pkg="sidewinder" type="sidewinderjoystickForce" name="sidewinderjoystickForce" machine="mainrobot" required="true">
-   </node>
-   
--->
-  <include file="$(find datalogger)/launch/datalogger.launch"/>
-  <machine name="mainrobot" address="mainrobot" user="rock" 
-    env-loader="/home/rock/catkin_ws/devel/env.sh" default="never" />
+<arg name="interface"/>
+
+<machine name="wheelchair" address="wheelchairEth" user="root" 
+    env-loader="/opt/ros/indigo/rosenv.sh" default="never" />
+    
+  <machine name="mainrobot" address="mainrobotEth" user="wheelchair" 
+    env-loader="/home/wheelchair/catkin_ws/rosenv.sh" default="never" timeout="20"/>
+    
+       
+ <!--<include file="$(find datalogger)/launch/datalogger.launch"/>-->
  
-  <machine name="remote" address="remote" user="ceezeh" 
-    env-loader="/home/ceezeh/catkin_ws/devel/env.sh" default="never" />
-
-  <node pkg="shared_dwa" type="sonar.sh" name="sonar" output="log"  respawn="true"/>
-  
-  <node name="odometry" pkg="shared_dwa" output="log" type="odometry.sh"  respawn="true">   
-   </node>
-
-  <node pkg="shared_dwa" type="controller_input.sh" name="controller_input"
-    output="log">
-    <param name="interface" value="joystick" />
+ 
+ <node pkg="controller_input" type="controller_input" name="controller_input"
+    output="log"  machine="wheelchair" required="true">
+   <rosparam param="interface" subst_value="true"> $(arg interface) </rosparam>
   </node>
   
- <node pkg="shared_dwa" type="controller.sh" name="controller"
-   output="log" respawn="true"/>
+   <node pkg="sonar_node" type="sonar" name="sonar"
+    output="log"  machine="wheelchair"  />
     
+<!--<node pkg="emergency_stop" type="emergency_stopper" name="estopper"
+    output="log"  machine="mainrobot" respawn="true"/> -->
   
+
+   <node pkg="odometry" type="encoder_odometry.py" name="encoder"
+    output="log"  machine="wheelchair" respawn="true"/> 
+  
+  <!--<node pkg="motion_controller" type="accurate_controller" name="motor_controller"
+    output="log"  machine="wheelchair" />-->
+  
+    <node pkg="controller_input" type="repeater" name="repeater" output="log"  machine="wheelchair"/>
+  
+  <include file="$(find costmap)/launch/sonar_map.launch"/> 
   
 </launch>
 

@@ -29,8 +29,8 @@
     output="log" machine="wheelchair" respawn="true"/>
     
     -->
-  <node pkg="map" type="local_map" name="local_map" machine="mainrobot" output="screen" required="true">
-  	<rosparam command="load" file="$(find map)/mymap.yaml" />
+  <node pkg="costmap" type="local_map" name="local_map" machine="mainrobot" output="screen" required="true">
+  	<rosparam command="load" file="$(find costmap)/mymap.yaml" />
   </node>
   <node pkg="shared_dwa" type="linear_dwa" name="linear_dwa" machine="mainrobot"  output="screen" >
      <rosparam command="load" file="$(find dwa)/dwa.yaml"/>

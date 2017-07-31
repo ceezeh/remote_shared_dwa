@@ -13,7 +13,7 @@
   </node>
   <node pkg="controller_input" type="repeater" name="repeater" output="log"  machine="wheelchair"/>
 
-<include file="$(find map)/launch/sim_map.launch"/> 
+<include file="$(find costmap)/launch/sim_map.launch"/> 
 
 </launch>
 

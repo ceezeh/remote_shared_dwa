@@ -12,7 +12,7 @@ void inputCallback(const geometry_msgs::TwistStamped& cmd) {
 	}
 	Speed speed = getRealSpeed(Speed(in.linear.x, in.angular.z));
 	in.linear.x = speed.v;
-	in.angular.z = speed.w;
+	in.angular.z = speed.w/2.4;
 	pub.publish(in);
 }
 

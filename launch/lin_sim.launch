@@ -7,7 +7,7 @@
 
 
 <node pkg="shared_dwa" type="linear_dwa" name="linear_dwa"   output="screen" >
-     <rosparam command="load" file="$(find map)/map.yaml"/>
+     <rosparam command="load" file="$(find costmap)/map.yaml"/>
      <rosparam command="load" file="$(find dwa)/dwa.yaml"/>
 	<rosparam command="load" file="$(find dwa)/sim.yaml"/>
    </node>

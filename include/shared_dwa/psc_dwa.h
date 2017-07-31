@@ -40,6 +40,7 @@ private:
 	//------------ Motor Variables ---------------
 
 	ros::Publisher usercommand_pub;
+	ros::Publisher clearance_pub;
 	ros::Subscriber interface_sub;
 
 	void usercommandCallback( geometry_msgs::TwistStamped cmd);

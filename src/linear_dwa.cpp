@@ -32,9 +32,9 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 			upperbound, lowerbound);
 	float maxCost = 0;
 	// Put weightings here.
-	float alpha = 0.02;	// For heading.
-	float beta = 0.2;	// For clearance.
-	float gamma = 1;	// For velocity.
+	float alpha = .02;		// For heading.
+	float beta = .03;		// For clearance.
+	float gamma = 1;
 	float final_clearance = 0;
 	cout << "Number of resultant velocities" << resultantVelocities.size()
 			<< endl;
@@ -44,6 +44,8 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 		const Pose goalpose = this->getGoalPose();
 		float heading = computeHeading(realspeed, goalpose);
 		float clearance = computeClearance(realspeed);
+		if (equals(clearance, 0))
+			continue;
 
 		float velocity = computeVelocity(realspeed);
 		float G = alpha * heading + beta * clearance + gamma * velocity;
@@ -59,12 +61,13 @@ Speed LinearDWA::computeNextVelocity(Speed chosenSpeed) {
 			//chosenSpeed= Speed(input.v, realspeed.w);
 //			chosenSpeed = (input+realspeed)*0.5;
 			final_clearance = clearance;
-			float a =  exp(-0.2*clearance);
-			chosenSpeed = realspeed*a +input*(1-a);
+			float a = exp(-0.2 * clearance);
+			chosenSpeed = realspeed * a + input * (1 - a);
 		}
 
 	}
 
-	ROS_INFO("Chosen speed: [v=%f, w=%f]. Maxcost=%f", chosenSpeed.v, chosenSpeed.w, maxCost);
+	ROS_INFO("Chosen speed: [v=%f, w=%f]. Maxcost=%f", chosenSpeed.v,
+			chosenSpeed.w, maxCost);
 	return chosenSpeed;
 }

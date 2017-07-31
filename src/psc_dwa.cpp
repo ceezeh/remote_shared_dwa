@@ -1,6 +1,7 @@
 #include "ros/ros.h"
 #include "geometry_msgs/Twist.h"
 #include "geometry_msgs/TwistStamped.h"
+#include "geometry_msgs/Vector3Stamped.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/Odometry.h"
 #include <unistd.h>
@@ -8,7 +9,7 @@
 #include <sstream>
 #include <stdlib.h>
 #include <numeric>
-#include <map/helper.h>
+#include <costmap/helper.h>
 #include "shared_dwa/psc_dwa.h"
 #include <chrono>
 
@@ -25,9 +26,10 @@ PSCDWA::PSCDWA(const char * topic, ros::NodeHandle &n_t) :
 
 	usercommand_pub = n.advertise<geometry_msgs::TwistStamped>(
 			"user_command_logger", 100);
+	clearance_pub = n.advertise<geometry_msgs::Vector3Stamped>("clearance", 10);
 	interface_sub = n.subscribe("user_command", 1, &PSCDWA::usercommandCallback,
 			this);
-	this->DATA_COMPLETE = 3;
+	this->DATA_COMPLETE = 1;
 }
 
 void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
@@ -41,9 +43,14 @@ void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
 		candidates.emplace_back(p);
 		return;
 	} else if (this->usercmd.header.frame_id == "HA") {
-		std = M_PI / 2.2;
+		std = M_PI / 5;
 	} else if (this->usercmd.header.frame_id == "SP") {
-		std = M_PI / 3;
+		std = M_PI / 4;
+	} else {
+		p.speed = input;
+		p.pval = 1;
+		candidates.emplace_back(p);
+		return;
 	}
 
 	float var = std * std; //(pi/5)^2
@@ -104,12 +111,12 @@ void PSCDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 	// Here we are assuming the robot will use this speed for the next few time steps. // This could be because of latency
 
 	cout << "Requested Direction: " << th << endl;
-	Pose currentpose = Pose(odom_all.pose.pose.position.x,
-			odom_all.pose.pose.position.y, odom_all.pose.pose.position.z);
+	Pose currentPose;
+	this->getCurrentPose(currentPose);
 	// Now dx, dy are in the body frame and will need to be rotated to the global frame.
-	float xt = cos(currentpose.th) * dx - sin(currentpose.th) * dy;
-	float yt = sin(currentpose.th) * dx + cos(currentpose.th) * dy;
-	Pose newGoalPose = currentpose;
+	float xt = cos(currentPose.th) * dx - sin(currentPose.th) * dy;
+	float yt = sin(currentPose.th) * dx + cos(currentPose.th) * dy;
+	Pose newGoalPose = currentPose;
 	if (!(equals(humanInput.v,0) && equals(humanInput.w, 0)))
 		newGoalPose = newGoalPose + Pose(xt, yt, th);
 	this->updateGoalPose(newGoalPose, th);
@@ -170,27 +177,29 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	this->n.getParam(topic.c_str(), a);
 	cout << "COUPLING=" << a << endl;
 	float inva = 1 / a;
-	float alpha = .02;		// For heading.
-	float beta = .11;		// For clearance.
+	float alpha = .01;		// For heading.
+	float beta = .5;		// For clearance.
 	float gamma = 1;		// For velocity.
 	float final_clearance = 0;
 	cout << "Number of resultant velocities" << resultantVelocities.size()
 			<< endl;
 	timer.stop();
-	ROS_INFO("PSC222 Max Duration: %d", timer.getMaxDuration());
-	ROS_INFO("PSC222 Average Duration: %d ", timer.getAveDuration());
-	ROS_INFO("PSC222 Last Duration: %d ", timer.getLastDuration());
+	ROS_INFO("PSC Geting Resultant Velocities: Max Duration: %d", timer.getMaxDuration());
+	ROS_INFO("PSC Geting Resultant Velocities: Average Duration: %d ", timer.getAveDuration());
+	ROS_INFO("PSC Geting Resultant Velocities: Last Duration: %d ", timer.getLastDuration());
 
 	vector<Distribution> inputDistribution;
 	inputDistribution.clear();
 	getInputCandidates(humanInput, inputDistribution);
 
+	Pose currentPose;
+	this->getCurrentPose(currentPose);
 	std::mutex mylock;
 	cout << "Number of input candidates" << inputDistribution.size() << endl;
 #pragma omp parallel for
 	for (int j = 0; j < inputDistribution.size(); j++) {
 		for (int i = 0; i < resultantVelocities.size(); i++) {
-			timer.start();
+//			timer.start();
 			Distribution d = inputDistribution[j];
 			Speed input = d.speed;
 
@@ -221,10 +230,8 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 							"cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
 					realspeed.v, realspeed.w, temp.v, temp.w, humanInput.v,
 					humanInput.w, heading, clearance, velocity, coupling, G,
-					cost, goalpose.x, goalpose.y, goalpose.th,
-					odom_all.pose.pose.position.x,
-					odom_all.pose.pose.position.y,
-					odom_all.pose.pose.position.z);
+					cost, goalpose.x, goalpose.y, goalpose.th, currentPose.x,
+					currentPose.y, currentPose.th);
 			mylock.lock();
 			if (cost > maxCost) {
 				maxCost = cost;
@@ -234,13 +241,19 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 				final_clearance = clearance;
 			}
 			mylock.unlock();
-			timer.stop();
-			ROS_INFO("PSC Max Duration: %d", timer.getMaxDuration());
-			ROS_INFO("PSC Average Duration: %d ", timer.getAveDuration());
-			ROS_INFO("PSC Last Duration: %d ", timer.getLastDuration());
+//			timer.stop();
+//			ROS_INFO("PSC Max Duration: %d", timer.getMaxDuration());
+//			ROS_INFO("PSC Average Duration: %d ", timer.getAveDuration());
+//			ROS_INFO("PSC Last Duration: %d ", timer.getLastDuration());
 		}
 	}
 
 	ROS_INFO("Chosen speed: [v=%f, w=%f]", chosenSpeed.v, chosenSpeed.w);
+	geometry_msgs::Vector3Stamped c;
+	c.header.stamp = ros::Time::now();
+	c.vector.z = final_clearance;
+	c.vector.x = chosenSpeed.v;
+	c.vector.y = chosenSpeed.w;
+	clearance_pub.publish(c);
 	return chosenSpeed;
 }
