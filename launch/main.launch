@@ -6,33 +6,32 @@
     env-loader="/opt/ros/indigo/rosenv.sh" default="never" />
     
   <machine name="mainrobot" address="mainrobotEth" user="wheelchair" 
-    env-loader="/home/wheelchair/catkin_ws/rosenv.sh" default="never" timeout="20"/>
+    env-loader="/home/wheelchair/catkin_ws/rosenv.sh" default="never"/>
     
        
  <!--<include file="$(find datalogger)/launch/datalogger.launch"/>-->
  
+  	<include file="$(find costmap)/launch/sonar_map.launch"/>
  
- <node pkg="controller_input" type="controller_input" name="controller_input"
-    output="log"  machine="wheelchair" required="true">
-   <rosparam param="interface" subst_value="true"> $(arg interface) </rosparam>
-  </node>
+	<node pkg="controller_input" type="controller_input" name="controller_input"
+    	output="log"  machine="wheelchair" required="true">
+   		<rosparam param="interface" subst_value="true"> $(arg interface) </rosparam>
+  	</node>
   
    <node pkg="sonar_node" type="sonar" name="sonar"
-    output="log"  machine="wheelchair"  />
+    	output="log"  machine="wheelchair" required="true"/>
     
-<!--<node pkg="emergency_stop" type="emergency_stopper" name="estopper"
     output="log"  machine="mainrobot" respawn="true"/> -->
-  
 
-   <node pkg="odometry" type="encoder_odometry.py" name="encoder"
-    output="log"  machine="wheelchair" respawn="true"/> 
+	<node pkg="odometry" type="encoder_odometry.py" name="encoder"
+    	output="log"  machine="wheelchair" respawn="true"/> 
   
-  <!--<node pkg="motion_controller" type="accurate_controller" name="motor_controller"
-    output="log"  machine="wheelchair" />-->
+  <node pkg="motion_controller" type="accurate_controller" name="motor_controller"
+    output="log"  machine="wheelchair" />
   
     <node pkg="controller_input" type="repeater" name="repeater" output="log"  machine="wheelchair"/>
   
-  <include file="$(find costmap)/launch/sonar_map.launch"/> 
+ 
   
 </launch>
 

@@ -87,7 +87,7 @@ void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
 
 		}
 	}
-	cout << "emplacing input vel....." << endl;
+//	cout << "emplacing input vel....." << endl;
 }
 void PSCDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 
@@ -110,7 +110,7 @@ void PSCDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 	dy = length * sin(th);
 	// Here we are assuming the robot will use this speed for the next few time steps. // This could be because of latency
 
-	cout << "Requested Direction: " << th << endl;
+//	cout << "Requested Direction: " << th << endl;
 	Pose currentPose;
 	this->getCurrentPose(currentPose);
 	// Now dx, dy are in the body frame and will need to be rotated to the global frame.
@@ -135,7 +135,7 @@ void PSCDWA::getData() {
 	}
 	usercommand_pub.publish(this->usercmd);
 	dataflag = 0;
-	cout << " exiting data acquisition" << endl;
+//	cout << " exiting data acquisition" << endl;
 
 }
 /*
@@ -152,7 +152,7 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 			usercmd.twist.angular.z);
 
 	if (humanInput == Speed(0, 0)) {
-		cout << "Stopping!";
+//		cout << "Stopping!";
 		return Speed(0, 0); // Stop!!
 	}
 
@@ -175,18 +175,18 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	float a = 100; // agreement factor between user command and resultant velocity.
 	string topic = this->topic + "/coupling";
 	this->n.getParam(topic.c_str(), a);
-	cout << "COUPLING=" << a << endl;
+//	cout << "COUPLING=" << a << endl;
 	float inva = 1 / a;
-	float alpha = .01;		// For heading.
+	float alpha = .006;		// For heading.
 	float beta = .5;		// For clearance.
 	float gamma = 1;		// For velocity.
 	float final_clearance = 0;
 	cout << "Number of resultant velocities" << resultantVelocities.size()
 			<< endl;
 	timer.stop();
-	ROS_INFO("PSC Geting Resultant Velocities: Max Duration: %d", timer.getMaxDuration());
-	ROS_INFO("PSC Geting Resultant Velocities: Average Duration: %d ", timer.getAveDuration());
-	ROS_INFO("PSC Geting Resultant Velocities: Last Duration: %d ", timer.getLastDuration());
+//	ROS_INFO("PSC Getting Resultant Velocities: Max Duration: %d", timer.getMaxDuration());
+//	ROS_INFO("PSC Getting Resultant Velocities: Average Duration: %d ", timer.getAveDuration());
+//	ROS_INFO("PSC Getting Resultant Velocities: Last Duration: %d ", timer.getLastDuration());
 
 	vector<Distribution> inputDistribution;
 	inputDistribution.clear();
