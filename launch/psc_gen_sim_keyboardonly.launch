@@ -1,0 +1,16 @@
+<launch>
+<arg name="interface" default="JS" />
+
+
+
+<include file="$(find wheelchairtest)/launch/agent.launch"/>
+<include file="$(find costmap)/launch/sim_map.launch"/>
+
+  <node pkg="shared_dwa" type="psc_dwa_gen" name="psc_dwa_gen" output="screen" >
+  	<rosparam command="load" file="$(find costmap)/map.yaml"/>
+     <rosparam command="load" file="$(find dwa)/dwa.yaml"/>
+     <rosparam command="load" file="$(find shared_dwa)/psc_dwa.yaml"/>
+	<rosparam command="load" file="$(find dwa)/sim.yaml"/>
+   </node>
+</launch>
+

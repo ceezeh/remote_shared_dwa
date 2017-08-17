@@ -193,14 +193,21 @@ include_directories(
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
 
-include_directories(include ${catkin_INCLUDE_DIRS} ${maphelper_INCLUDE_DIRS} ${dwa_INCLUDE_DIRS})
+include_directories(include ${catkin_INCLUDE_DIRS} ${maphelper_INCLUDE_DIRS} ${dwalib_INCLUDE_DIRS})
 
 
 add_library(shared_dwa_lib  src/psc_dwa.cpp)
-target_link_libraries(shared_dwa_lib ${catkin_LIBRARIES} ${maphelper_LIBRARIES} ${dwa_LIBRARIES})
+target_link_libraries(shared_dwa_lib ${catkin_LIBRARIES} ${maphelper_LIBRARIES} ${dwalib_LIBRARIES})
+
+add_library(shared_dwagen_lib  src/psc_dwa_gen.cpp)
+target_link_libraries(shared_dwagen_lib ${catkin_LIBRARIES} ${maphelper_LIBRARIES} ${dwalib_LIBRARIES})
+
 
 add_executable(psc_dwa  src/main_pdwa.cpp)
 target_link_libraries(psc_dwa shared_dwa_lib )
+
+add_executable(psc_dwa_gen  src/main_pdwagen.cpp)
+target_link_libraries(psc_dwa_gen shared_dwagen_lib )
 
 add_executable(linear_dwa  src/linear_dwa.cpp src/main_ldwa.cpp)
 target_link_libraries(linear_dwa shared_dwa_lib)
