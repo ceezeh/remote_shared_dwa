@@ -1,0 +1,16 @@
+<launch>
+<arg name="interface" default="JS" />
+
+
+<include file="$(find wheelchairtest)/launch/agent.launch"/>
+
+<include file="$(find shared_dwa)/launch/sim.launch">
+<arg name="interface" value ="$(arg interface)"/>
+</include>  
+  
+  <node pkg="shared_dwa" type="noassist" name="noassist" output="screen" >
+  	<rosparam command="load" file="$(find dwa)/sim.yaml"/>
+  </node>
+  
+
+</launch>

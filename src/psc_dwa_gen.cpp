@@ -13,8 +13,7 @@
 #include "shared_dwa/psc_dwa_gen.h"
 #include <chrono>
 
-
-#define USER_CMD_BIT 5
+#define USER_CMD_BIT 7
 
 using namespace std;
 using namespace std::chrono;
@@ -23,15 +22,21 @@ MyTimer timer = MyTimer();
 PSCDWAGen::PSCDWAGen(const char * topic, ros::NodeHandle &n_t) :
 		DWAGen(topic, n_t) {
 
+	string ctopic = this->topic + "/coupling";
+	this->n.getParam(ctopic.c_str(), this->coupling);
+
 	usercommand_pub = n.advertise<geometry_msgs::TwistStamped>(
 			"user_command_logger", 100);
 	clearance_pub = n.advertise<geometry_msgs::Vector3Stamped>("clearance", 10);
-	interface_sub = n.subscribe("user_command", 1, &PSCDWAGen::usercommandCallback,
-			this);
-	this->DATA_COMPLETE = 63;
+	interface_sub = n.subscribe("user_command", 1,
+			&PSCDWAGen::usercommandCallback, this);
+	this->DATA_COMPLETE = 255;
+
+	this->updateGoalPose(Pose(12, 0, 0), 0);
 }
 
-void PSCDWAGen::getInputCandidates(Speed input, vector<Distribution> &candidates) {
+void PSCDWAGen::getInputCandidates(Speed input,
+		vector<Distribution> &candidates) {
 	Distribution p;
 	float std = 0;
 	if (this->usercmd.header.frame_id == "JS") {
@@ -150,10 +155,10 @@ Speed PSCDWAGen::computeNextVelocity(Speed chosenSpeed) {
 	Speed humanInput = Speed(this->usercmd.twist.linear.x,
 			usercmd.twist.angular.z);
 
-	if (humanInput == Speed(0, 0)) {
-//		cout << "Stopping!";
-		return Speed(0, 0); // Stop!!
-	}
+//	if (humanInput == Speed(0, 0)) {
+////		cout << "Stopping!";
+//		return Speed(0, 0); // Stop!!
+//	}
 
 	concurrent_vector<Speed> resultantVelocities;
 	resultantVelocities.clear();
@@ -169,11 +174,12 @@ Speed PSCDWAGen::computeNextVelocity(Speed chosenSpeed) {
 	resultantVelocities = getResultantVelocities(resultantVelocities,
 			upperbound, lowerbound);
 	float maxCost = 0;
-	// More means permit less agreement. default .1 , 10 is more assistance. 100 much more asistance
+	// More means permit more deviation from user's intention. default .1 , 10 is more assistance. 100 much more asistance
 	// Put weightings here
-	float a = 100; // agreement factor between user command and resultant velocity.
-	string topic = this->topic + "/coupling";
-	this->n.getParam(topic.c_str(), a);
+	float a = this->coupling; // agreement factor between user command and resultant velocity.
+	if (humanInput == Speed(0, 0)) {
+		a = .51;
+	}
 //	cout << "COUPLING=" << a << endl;
 	float inva = 1 / a;
 	float alpha = .006;		// For heading.
@@ -195,55 +201,59 @@ Speed PSCDWAGen::computeNextVelocity(Speed chosenSpeed) {
 	this->getCurrentPose(currentPose);
 	std::mutex mylock;
 	cout << "Number of input candidates" << inputDistribution.size() << endl;
-#pragma omp parallel for
-	for (int j = 0; j < inputDistribution.size(); j++) {
-		for (int i = 0; i < resultantVelocities.size(); i++) {
+
+#pragma omp simd parallel
+	{
+#pragma omp for schedule(dynamic) collapse(2)
+		for (int j = 0; j < inputDistribution.size(); j++) {
+			for (int i = 0; i < resultantVelocities.size(); i++) {
 //			timer.start();
-			Distribution d = inputDistribution[j];
-			Speed input = d.speed;
+				Distribution d = inputDistribution[j];
+				Speed input = d.speed;
 
-			Speed realspeed = resultantVelocities[i];
-			const Pose goalpose = this->getGoalPose();
-			float heading = computeHeading(realspeed, goalpose);
-			float clearance = computeClearance(realspeed);
-			if (equals(clearance, 0))
-				continue;
-			float velocity = computeVelocity(realspeed);
-			float G = alpha * heading + beta * clearance + gamma * velocity;
+				Speed realspeed = resultantVelocities[i];
+				const Pose goalpose = this->getGoalPose();
+				float heading = computeHeading(realspeed, goalpose);
+				float clearance = computeClearance(realspeed);
+				if (equals(clearance, 0))
+					continue;
+				float velocity = computeVelocity(realspeed);
+				float G = alpha * heading + beta * clearance + gamma * velocity;
 
-			// Compute preference for user's input
-			// 1 here is the weighting for that particular input speed,
-			// which will change in time!
-			Speed temp = normaliseSpeed(realspeed) - humanInput;
-			float x = magSquared(temp);
-			x *= -0.5 * inva;
-			float coupling = expf(x);
-			float cost = G * coupling;
+				// Compute preference for user's input
+				// 1 here is the weighting for that particular input speed,
+				// which will change in time!
+				Speed temp = normaliseSpeed(realspeed) - humanInput;
+				float x = magSquared(temp);
+				x *= -0.5 * inva;
+				float coupling = expf(x);
+				float cost = G * coupling;
 
-			ROS_INFO(
-					"Printing out PSCDWA parameters for specific velocity ...");
-			ROS_INFO(
-					"Candidate Vel[v = %f, w= %f], Norm Candidate Vel[v = %f, w= %f],"
-							"Inpt Vel[v = %f, w= %f]  heading=%f, clearance=%f, "
-							"velocity = %f, coupling = %f, G = %f,"
-							"cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
-					realspeed.v, realspeed.w, temp.v, temp.w, humanInput.v,
-					humanInput.w, heading, clearance, velocity, coupling, G,
-					cost, goalpose.x, goalpose.y, goalpose.th, currentPose.x,
-					currentPose.y, currentPose.th);
-			mylock.lock();
-			if (cost > maxCost) {
-				maxCost = cost;
+				ROS_INFO(
+						"Printing out PSCDWA parameters for specific velocity ...");
+				ROS_INFO(
+						"Candidate Vel[v = %f, w= %f], Norm Candidate Vel[v = %f, w= %f],"
+								"Inpt Vel[v = %f, w= %f]  heading=%f, clearance=%f, "
+								"velocity = %f, coupling = %f, G = %f,"
+								"cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
+						realspeed.v, realspeed.w, temp.v, temp.w, humanInput.v,
+						humanInput.w, heading, clearance, velocity, coupling, G,
+						cost, goalpose.x, goalpose.y, goalpose.th,
+						currentPose.x, currentPose.y, currentPose.th);
+				mylock.lock();
+				if (cost > maxCost) {
+					maxCost = cost;
 
-				chosenSpeed = realspeed;
+					chosenSpeed = realspeed;
 
-				final_clearance = clearance;
-			}
-			mylock.unlock();
+					final_clearance = clearance;
+				}
+				mylock.unlock();
 //			timer.stop();
 //			ROS_INFO("PSC Max Duration: %d", timer.getMaxDuration());
 //			ROS_INFO("PSC Average Duration: %d ", timer.getAveDuration());
 //			ROS_INFO("PSC Last Duration: %d ", timer.getLastDuration());
+			}
 		}
 	}
 
@@ -256,3 +266,4 @@ Speed PSCDWAGen::computeNextVelocity(Speed chosenSpeed) {
 	clearance_pub.publish(c);
 	return chosenSpeed;
 }
+

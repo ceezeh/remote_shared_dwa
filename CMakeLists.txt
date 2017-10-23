@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(shared_dwa)
 
-set(CMAKE_CXX_FLAGS "-std=c++0x -O0 ${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "-std=c++0x -O3 ${CMAKE_CXX_FLAGS}")
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
@@ -195,22 +195,26 @@ include_directories(
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${maphelper_INCLUDE_DIRS} ${dwalib_INCLUDE_DIRS})
 
-
 add_library(shared_dwa_lib  src/psc_dwa.cpp)
 target_link_libraries(shared_dwa_lib ${catkin_LIBRARIES} ${maphelper_LIBRARIES} ${dwalib_LIBRARIES})
+
+add_executable(psc_dwa  src/main_pdwa.cpp)
+target_link_libraries(psc_dwa shared_dwa_lib )
+
+add_executable(linear_dwa  src/linear_dwa.cpp src/main_ldwa.cpp)
+target_link_libraries(linear_dwa shared_dwa_lib)
+
 
 add_library(shared_dwagen_lib  src/psc_dwa_gen.cpp)
 target_link_libraries(shared_dwagen_lib ${catkin_LIBRARIES} ${maphelper_LIBRARIES} ${dwalib_LIBRARIES})
 
 
-add_executable(psc_dwa  src/main_pdwa.cpp)
-target_link_libraries(psc_dwa shared_dwa_lib )
-
 add_executable(psc_dwa_gen  src/main_pdwagen.cpp)
 target_link_libraries(psc_dwa_gen shared_dwagen_lib )
 
-add_executable(linear_dwa  src/linear_dwa.cpp src/main_ldwa.cpp)
-target_link_libraries(linear_dwa shared_dwa_lib)
+
+add_executable(lin_dwa_gen  src/lin_dwa_gen.cpp src/main_ldwagen.cpp)
+target_link_libraries(lin_dwa_gen shared_dwagen_lib)
 
 add_executable(noassist  src/noassist.cpp )
 target_link_libraries(noassist ${catkin_LIBRARIES})

@@ -6,12 +6,11 @@
 <arg name="interface" value ="$(arg interface)"/>
 </include>  
 
-  <node pkg="shared_dwa" type="psc_dwa_gen" name="psc_dwa_gen" output="screen" >
-  	<rosparam command="load" file="$(find costmap)/map.yaml"/>
+
+<node pkg="shared_dwa" type="lin_dwa_gen" name="lin_dwa_gen"   output="screen" >
+     <rosparam command="load" file="$(find costmap)/map.yaml"/>
      <rosparam command="load" file="$(find dwa)/dwa.yaml"/>
      <rosparam command="load" file="$(find dwa)/dwagen.yaml"/>
-     <rosparam command="load" file="$(find shared_dwa)/psc_dwa.yaml"/>
 	<rosparam command="load" file="$(find dwa)/sim.yaml"/>
    </node>
 </launch>
-

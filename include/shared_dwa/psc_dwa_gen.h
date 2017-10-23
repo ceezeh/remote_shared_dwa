@@ -2,8 +2,8 @@
  * SHARED DWA runs in its own thread.
  */
 
-#ifndef PSC_DWA_H
-#define PSC_DWA_H
+#ifndef PSC_DWA_GEN_H
+#define PSC_DWA_GEN_H
 
 #define  USE_MATH_DEFINES
 //#define 	DEBUG
@@ -36,7 +36,10 @@ protected:
 	void getInputCandidates(Speed input, vector<Distribution> &candidates);
 	geometry_msgs::TwistStamped usercmd;
 
-private:
+	// ------------PSC-----------
+	float coupling;
+
+//private:
 	//------------ Motor Variables ---------------
 
 	ros::Publisher usercommand_pub;

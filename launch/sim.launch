@@ -4,16 +4,15 @@
 <machine name="wheelchair" address="wheelchairEth" user="root" 
     env-loader="/opt/ros/indigo/rosenv.sh" default="never" />
 
-  <machine name="mainrobot" address="mainrobotEth" user="wheelchair" 
-    env-loader="/home/wheelchair/catkin_ws/rosenv.sh" default="never" timeout="20"/>
+<machine name="mainrobot" address="mainrobotEth" user="wheelchair" 
+  env-loader="/home/wheelchair/catkin_ws/rosenv.sh" default="never" timeout="20"/>
 
-	<node pkg="controller_input" type="controller_input" name="controller_input"
-    	output="log"  machine="wheelchair">
-   		<rosparam param="interface" subst_value="true"> $(arg interface) </rosparam>
-  	</node>
-  
-  	<node pkg="controller_input" type="repeater" name="repeater" output="log"  machine="wheelchair"/>
+<node pkg="controller_input" type="controller_input" name="controller_input"
+   	output="log"  machine="wheelchair">   		
+   	<rosparam param="interface" subst_value="true"> $(arg interface) </rosparam>
+</node>
 
+<node pkg="controller_input" type="repeater" name="repeater" output="log"  machine="wheelchair"/>
 <include file="$(find costmap)/launch/sim_map.launch"/> 
 
 </launch>

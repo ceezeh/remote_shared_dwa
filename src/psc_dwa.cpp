@@ -29,7 +29,10 @@ PSCDWA::PSCDWA(const char * topic, ros::NodeHandle &n_t) :
 	clearance_pub = n.advertise<geometry_msgs::Vector3Stamped>("clearance", 10);
 	interface_sub = n.subscribe("user_command", 1, &PSCDWA::usercommandCallback,
 			this);
-	this->DATA_COMPLETE = 1;
+	this->DATA_COMPLETE = 3;
+	this->coupling = 100;
+	string ctopic = this->topic + "/coupling";
+	this->n.getParam(ctopic.c_str(), this->coupling);
 }
 
 void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
@@ -37,9 +40,10 @@ void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
 	float std = 0;
 	if (this->usercmd.header.frame_id == "JS") {
 		p.speed = input;
+//		std = M_PI / 5;
 		p.pval = 1;
-
-		//If straight backward or forward, return only one value.
+//
+//		//If straight backward or forward, return only one value.
 		candidates.emplace_back(p);
 		return;
 	} else if (this->usercmd.header.frame_id == "HA") {
@@ -61,11 +65,11 @@ void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
 	//If straight backward or forward, return only one value.
 	candidates.emplace_back(p);
 
-	if (!equals(input.w, 0)) {
+	if (!((equals(input.w, 0) && input.v > 0))) {
 		// find magnitude and angle.
 		float th_0 = atan2(input.w, input.v);
 		float mag = vectorNorm(input);
-		int step = 3;
+		int step = 1;
 		float d = std / step;
 		for (float dth = d; dth <= std; dth += d) {
 			if (equals(dth, 0))
@@ -73,9 +77,10 @@ void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
 			float th = th_0 - dth;
 			float v = cos(th) * mag;
 			float w = sin(th) * mag;
-			float pval = exp(-dt * dt / (2 * var)) / pow(2 * var * M_PI, 0.5);
+			float pval = 1; //exp(-dt * dt / (2 * var)) / pow(2 * var * M_PI, 0.5);
 			Distribution p;
-			p.speed = Speed(v, w);
+			p.speed.v = v;
+			p.speed.w = w; //= Speed(v, w);
 			p.pval = pval;
 			candidates.emplace_back(p);
 
@@ -88,6 +93,12 @@ void PSCDWA::getInputCandidates(Speed input, vector<Distribution> &candidates) {
 		}
 	}
 //	cout << "emplacing input vel....." << endl;
+
+	//Print out inputs
+	for (int i = 0; i < candidates.size(); i++) {
+		cout << "input v:" << candidates[i].speed.v << ", w:"
+				<< candidates[i].speed.w << endl;
+	}
 }
 void PSCDWA::usercommandCallback(geometry_msgs::TwistStamped cmd) {
 
@@ -172,12 +183,14 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	float maxCost = 0;
 	// More means permit less agreement. default .1 , 10 is more assistance. 100 much more asistance
 	// Put weightings here
-	float a = 100; // agreement factor between user command and resultant velocity.
-	string topic = this->topic + "/coupling";
-	this->n.getParam(topic.c_str(), a);
-//	cout << "COUPLING=" << a << endl;
+	float a = this->coupling; // agreement factor between user command and resultant velocity.
+	if ((equals(humanInput.w, 0) && humanInput.v > 0) ||
+			(equals(humanInput.v, 0) && !equals(humanInput.w, 0))) {
+		a = .100;
+	}
+	//	cout << "COUPLING=" << a << endl;
 	float inva = 1 / a;
-	float alpha = .006;		// For heading.
+	float alpha = .06;		// For heading.
 	float beta = .5;		// For clearance.
 	float gamma = 1;		// For velocity.
 	float final_clearance = 0;
@@ -195,7 +208,7 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 	Pose currentPose;
 	this->getCurrentPose(currentPose);
 	std::mutex mylock;
-	cout << "Number of input candidates" << inputDistribution.size() << endl;
+//	cout << "Number of input candidates" << inputDistribution.size() << endl;
 #pragma omp parallel for
 	for (int j = 0; j < inputDistribution.size(); j++) {
 		for (int i = 0; i < resultantVelocities.size(); i++) {
@@ -205,7 +218,7 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 
 			Speed realspeed = resultantVelocities[i];
 			const Pose goalpose = this->getGoalPose();
-			float heading = computeHeading(realspeed, goalpose);
+			float heading = computeHeading(realspeed, goalpose);//This is an issue though.
 			float clearance = computeClearance(realspeed);
 			if (equals(clearance, 0))
 				continue;
@@ -215,23 +228,22 @@ Speed PSCDWA::computeNextVelocity(Speed chosenSpeed) {
 			// Compute preference for user's input
 			// 1 here is the weighting for that particular input speed,
 			// which will change in time!
-			Speed temp = normaliseSpeed(realspeed) - humanInput;
+			Speed temp = normaliseSpeed(realspeed) - input;
 			float x = magSquared(temp);
 			x *= -0.5 * inva;
 			float coupling = expf(x);
-			float cost = G * coupling;
+			float cost = G * coupling*d.pval;
 
 			ROS_INFO(
 					"Printing out PSCDWA parameters for specific velocity ...");
 			ROS_INFO(
-					"Candidate Vel[v = %f, w= %f], Norm Candidate Vel[v = %f, w= %f],"
-							"Inpt Vel[v = %f, w= %f]  heading=%f, clearance=%f, "
+					"Candidate Vel[v = %f, w= %f],Inpt Vel[v = %f, w= %f]  heading=%f, clearance=%f, "
 							"velocity = %f, coupling = %f, G = %f,"
 							"cost = %f, Goal Pose (x: %f, y: %f, th: %f), Current Pose (x: %f, y: %f, th: %f)",
-					realspeed.v, realspeed.w, temp.v, temp.w, humanInput.v,
-					humanInput.w, heading, clearance, velocity, coupling, G,
-					cost, goalpose.x, goalpose.y, goalpose.th, currentPose.x,
-					currentPose.y, currentPose.th);
+					realspeed.v, realspeed.w, input.v, input.w, heading,
+					clearance, velocity, coupling, G, cost, goalpose.x,
+					goalpose.y, goalpose.th, currentPose.x, currentPose.y,
+					currentPose.th);
 			mylock.lock();
 			if (cost > maxCost) {
 				maxCost = cost;

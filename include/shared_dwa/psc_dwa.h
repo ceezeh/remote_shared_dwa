@@ -42,6 +42,7 @@ private:
 	ros::Publisher usercommand_pub;
 	ros::Publisher clearance_pub;
 	ros::Subscriber interface_sub;
+	float coupling;
 
 	void usercommandCallback( geometry_msgs::TwistStamped cmd);
 	void updateInputCommand(float v, float w, InterfaceType In);

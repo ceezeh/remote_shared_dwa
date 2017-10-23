@@ -2,7 +2,7 @@
 <arg name="interface" default="JS" />
 
 
-
+<include file="$(find costmap)/launch/sim_map.launch"/>
   <node pkg="shared_dwa" type="psc_dwa" name="psc_dwa" output="screen" >
   	<rosparam command="load" file="$(find costmap)/map.yaml"/>
      <rosparam command="load" file="$(find dwa)/dwa.yaml"/>
